@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import styles from './Login.module.css';
 import axios from 'axios';
 
 function Register() {
@@ -29,44 +30,60 @@ function Register() {
     }
   };
 
-  return (
-    <div style={{ maxWidth: '400px', margin: '50px auto' }}>
-      <h2>Register</h2>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          placeholder="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          style={{ width: '100%', padding: '10px', marginBottom: '10px' }}
+return (
+  <div className={styles.loginContainer}>
+    <form onSubmit={handleSubmit} className={styles.formWrapper}>
+      <h1 className={styles.title}>Create Account</h1>
+
+      {/* This will now use our new error style */}
+      {error && <p className={styles.errorMessage}>{error}</p>}
+
+      <div className={styles.inputGroup}>
+        <label htmlFor="name" className={styles.label}>Name</label>
+        <input 
+          type="text" 
+          id="name"
+          className={styles.input}
+          value={name} 
+          onChange={(e) => setName(e.target.value)} 
+          required 
         />
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          style={{ width: '100%', padding: '10px', marginBottom: '10px' }}
+      </div>
+
+      <div className={styles.inputGroup}>
+        <label htmlFor="email" className={styles.label}>Email</label>
+        <input 
+          type="email" 
+          id="email"
+          className={styles.input}
+          value={email} 
+          onChange={(e) => setEmail(e.target.value)} 
+          required 
         />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={{ width: '100%', padding: '10px', marginBottom: '10px' }}
+      </div>
+
+      <div className={styles.inputGroup}>
+        <label htmlFor="password" className={styles.label}>Password</label>
+        <input 
+          type="password" 
+          id="password"
+          className={styles.input}
+          value={password} 
+          onChange={(e) => setPassword(e.target.value)} 
+          required 
         />
-        <button type="submit" style={{ width: '100%', padding: '10px' }}>
-          Register
-        </button>
-      </form>
-      <p>
-        Already have an account? <a href="/login">Login</a>
+      </div>
+
+      <button type="submit" className={styles.button}>Register</button>
+      
+      <p className={styles.redirectText}> 
+        Already have an account?{' '}
+        <a href="/login" className={styles.redirectLink}>Login</a>
       </p>
-    </div>
-  );
+
+    </form>
+  </div>
+);
 }
 
 export default Register;

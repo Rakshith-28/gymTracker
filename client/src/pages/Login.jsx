@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import styles from './Login.module.css';
 import axios from 'axios';
 
 function Login() {
@@ -27,36 +28,45 @@ function Login() {
     }
   };
 
-  return (
-    <div style={{ maxWidth: '400px', margin: '50px auto' }}>
-      <h2>Login</h2>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      <form onSubmit={handleSubmit}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          style={{ width: '100%', padding: '10px', marginBottom: '10px' }}
+return (
+  <div className={styles.loginContainer}>
+    <form onSubmit={handleSubmit} className={styles.formWrapper}>
+      <h1 className={styles.title}>Login </h1>
+
+      <div className={styles.inputGroup}>
+        <label htmlFor="email" className={styles.label}>Email</label>
+        <input 
+          type="email" 
+          id="email"
+          className={styles.input}
+          value={email} 
+          onChange={(e) => setEmail(e.target.value)} 
+          required 
         />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={{ width: '100%', padding: '10px', marginBottom: '10px' }}
+      </div>
+
+      <div className={styles.inputGroup}>
+        <label htmlFor="password" className={styles.label}>Password</label>
+        <input 
+          type="password" 
+          id="password"
+          className={styles.input}
+          value={password} 
+          onChange={(e) => setPassword(e.target.value)} 
+          required 
         />
-        <button type="submit" style={{ width: '100%', padding: '10px' }}>
-          Login
-        </button>
-      </form>
-      <p>
-        Don't have an account? <a href="/register">Register</a>
-      </p>
-    </div>
-  );
+      </div>
+
+      <button type="submit" className={styles.button}>Login</button>
+      
+      {/* We'll style this link in the next step */}
+      <p className={styles.redirectText}> 
+  Don't have an account?{' '}
+  <a href="/register" className={styles.redirectLink}>Register</a>
+</p>
+    </form>
+  </div>
+);
 }
 
 export default Login;
