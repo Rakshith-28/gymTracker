@@ -26,10 +26,12 @@ app.use(express.json());
 
 // Routes
 const authRoutes = require('./routes/authRoutes');
-const workoutRoutes = require('./routes/workoutRoutes');  // ADD THIS
+const workoutRoutes = require('./routes/workoutRoutes');
+const exerciseRoutes = require('./routes/exerciseRoutes');  // ADD THIS
 
 app.use('/api/auth', authRoutes);
-app.use('/api/workouts', workoutRoutes);  // ADD THIS
+app.use('/api/workouts', workoutRoutes);
+app.use('/api/exercises', exerciseRoutes);  // ADD THIS
 
 
 
