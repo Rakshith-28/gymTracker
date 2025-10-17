@@ -28,12 +28,14 @@ app.use(express.json());
 const authRoutes = require('./routes/authRoutes');
 const workoutRoutes = require('./routes/workoutRoutes');
 const exerciseRoutes = require('./routes/exerciseRoutes');
-const analyticsRoutes = require('./routes/analyticsRoutes');  // ADD THIS
+const analyticsRoutes = require('./routes/analyticsRoutes');
+const userRoutes = require('./routes/userRoutes');  // ADD THIS
 
 app.use('/api/auth', authRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/exercises', exerciseRoutes);
-app.use('/api/analytics', analyticsRoutes);  // ADD THIS
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/user', userRoutes);  // ADD THIS
 
 
 
