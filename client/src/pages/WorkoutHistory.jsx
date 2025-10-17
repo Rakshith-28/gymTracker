@@ -1,26 +1,52 @@
- import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 function WorkoutHistory() {
   const [workouts, setWorkouts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  const fetchWorkouts = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get('http://localhost:5000/api/workouts', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setWorkouts(response.data);
+      setLoading(false);
+    } catch (err) {
+      console.error('Error fetching workouts:', err);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchWorkouts = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get('http://localhost:5000/api/workouts', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setWorkouts(response.data);
-        setLoading(false);
-      } catch (err) {
-        console.error('Error fetching workouts:', err);
-        setLoading(false);
-      }
-    };
     fetchWorkouts();
   }, []);
+
+  const handleDelete = async (workoutId) => {
+    if (!window.confirm('Are you sure you want to delete this workout?')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`http://localhost:5000/api/workouts/${workoutId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      alert('Workout deleted successfully!');
+      fetchWorkouts(); // Refresh the list
+    } catch (err) {
+      alert('Failed to delete workout');
+      console.error('Error deleting workout:', err);
+    }
+  };
+
+  const handleEdit = (workoutId) => {
+    navigate(`/edit-workout/${workoutId}`);
+  };
 
   if (loading) return <div style={{ padding: '50px', textAlign: 'center' }}>Loading...</div>;
 
@@ -33,7 +59,32 @@ function WorkoutHistory() {
       ) : (
         workouts.map(workout => (
           <div key={workout._id} style={{ marginBottom: '30px', padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
-            <h3>{new Date(workout.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h3>{new Date(workout.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={() => handleEdit(workout._id)} style={{
+                  padding: '8px 15px',
+                  backgroundColor: '#2196F3',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}>
+                  Edit
+                </button>
+                <button onClick={() => handleDelete(workout._id)} style={{
+                  padding: '8px 15px',
+                  backgroundColor: '#f44336',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}>
+                  Delete
+                </button>
+              </div>
+            </div>
+
             {workout.duration && <p><strong>Duration:</strong> {workout.duration} minutes</p>}
             
             {workout.exercises.map((exercise, idx) => (
@@ -73,4 +124,3 @@ function WorkoutHistory() {
 }
 
 export default WorkoutHistory;
-
