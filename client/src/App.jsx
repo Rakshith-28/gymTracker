@@ -6,6 +6,7 @@ import Register from './pages/Register';
 import LogWorkout from './pages/LogWorkout';
 import WorkoutHistory from './pages/WorkoutHistory';
 import Profile from './pages/Profile';
+import Analytics from './pages/Analytics';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
           <Route path="/log-workout" element={<LogWorkout />} />
           <Route path="/history" element={<WorkoutHistory />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/analytics" element={<Analytics />} />
         </Routes>
       </div>
     </Router>
