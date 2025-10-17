@@ -33,6 +33,9 @@ function Navbar() {
             <Link to="/history" style={{ color: 'white', textDecoration: 'none' }}>
               History
             </Link>
+            <Link to="/profile" style={{ color: 'white', textDecoration: 'none' }}>
+               Profile
+            </Link>
           </>
         )}
       </div>
