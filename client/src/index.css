@@ -1,7 +1,19 @@
-body {
+* {
   margin: 0;
-  /* Replace the old font-family with this line */
-  font-family: 'Poppins', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: #000;
+  color: #fff;
+  line-height: 1.6;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
 }
