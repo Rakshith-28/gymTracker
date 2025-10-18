@@ -1,0 +1,122 @@
+/* --- Main Navbar Container --- */
+.navbar {
+  background-color: rgba(10, 10, 10, 0.7);
+  backdrop-filter: blur(10px);
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #3f3f46;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  width: 100%;
+  box-sizing: border-box; 
+}
+
+/* --- Logo Styling --- */
+.logoContainer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+}
+
+.logoIcon {
+  background: linear-gradient(to bottom right, #dc2626, #ea580c);
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+}
+
+.logoText {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: white;
+  letter-spacing: 1px;
+}
+
+/* --- Navigation Links --- */
+.navLinks {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.navLink {
+  text-decoration: none;
+  color: #a1a1aa;
+  font-weight: 500;
+  transition: color 0.2s ease-in-out;
+  position: relative;
+  padding: 0.5rem 0;
+}
+
+.navLink:hover {
+  color: white;
+}
+
+.navLink::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(to right, #dc2626, #ea580c);
+  transition: width 0.3s ease-in-out;
+}
+
+.navLink:hover::after {
+  width: 100%;
+}
+
+/* --- Buttons (Login/Logout) --- */
+.button {
+  padding: 0.6rem 1.2rem;
+  border-radius: 0.5rem;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  text-decoration: none;
+}
+
+.primaryButton {
+  background: linear-gradient(to right, #dc2626, #ea580c);
+  color: white;
+}
+
+.primaryButton:hover {
+  filter: brightness(1.2);
+  box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3);
+}
+
+.secondaryButton {
+  background-color: transparent;
+  color: #d4d4d8;
+  border: 1px solid #3f3f46;
+}
+
+.secondaryButton:hover {
+  background-color: #27272a;
+  color: white;
+}
+
+/* --- Mobile Menu (Hamburger Icon) --- */
+.menuButton {
+  display: none; /* Hidden by default */
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+/* --- Responsive Design --- */
+@media (max-width: 768px) {
+  .navLinks {
+    display: none; /* Hide links on mobile */
+  }
+  .menuButton {
+    display: block; /* Show hamburger icon */
+  }
+}
