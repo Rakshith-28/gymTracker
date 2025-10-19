@@ -29,13 +29,17 @@ const authRoutes = require('./routes/authRoutes');
 const workoutRoutes = require('./routes/workoutRoutes');
 const exerciseRoutes = require('./routes/exerciseRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
-const userRoutes = require('./routes/userRoutes');  // ADD THIS
+const userRoutes = require('./routes/userRoutes');
+const sessionRoutes = require('./routes/sessionRoutes');      // ADD THIS
+const templateRoutes = require('./routes/templateRoutes');    // ADD THIS
 
 app.use('/api/auth', authRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/exercises', exerciseRoutes);
 app.use('/api/analytics', analyticsRoutes);
-app.use('/api/user', userRoutes);  // ADD THIS
+app.use('/api/user', userRoutes);
+app.use('/api/sessions', sessionRoutes);        // ADD THIS
+app.use('/api/templates', templateRoutes);      // ADD THIS
 
 
 
