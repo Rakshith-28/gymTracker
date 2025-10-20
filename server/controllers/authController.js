@@ -33,7 +33,8 @@ exports.register = async (req, res) => {
       token
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Registration error:', error); // <- Make sure this exists
+    res.status(500).json({ message: 'Server error' });
   }
 };
 

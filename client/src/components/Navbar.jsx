@@ -57,8 +57,7 @@ function Navbar() {
             {/* Display the welcome message with user name (from HEAD branch) */}
             <span className={styles.welcomeText}>Welcome, {user.name || 'User'}!</span>
             
-            {/* Logged-in links (Combined and fixed to match HEAD routes) */}
-            <Link to="/log-workout" className={styles.navLink}>Log Workout</Link>
+            {/* Logged-in links (updated: removed Log Workout) */}
             <Link to="/history" className={styles.navLink}>History</Link>
             <Link to="/analytics" className={styles.navLink}>Analytics</Link>
             <Link to="/profile" className={styles.navLink}>Profile</Link>

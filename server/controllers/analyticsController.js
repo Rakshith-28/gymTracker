@@ -1,15 +1,17 @@
- 
-const Workout = require('../models/Workout');
+const WorkoutSession = require('../models/WorkoutSession');
+
+// Helper function to convert seconds to minutes
+const secondsToMinutes = (seconds) => Math.round(seconds / 60);
 
 // Get Personal Records (PRs) for each exercise
 exports.getPersonalRecords = async (req, res) => {
   try {
-    const workouts = await Workout.find({ userId: req.user.id });
+    const sessions = await WorkoutSession.find({ userId: req.user.id });
     
     const prs = {};
     
-    workouts.forEach(workout => {
-      workout.exercises.forEach(exercise => {
+    sessions.forEach(session => {
+      session.exercises.forEach(exercise => {
         const exerciseName = exercise.name;
         
         exercise.sets.forEach(set => {
@@ -23,8 +25,8 @@ exports.getPersonalRecords = async (req, res) => {
               weight: set.weight,
               reps: set.reps,
               oneRepMax: Math.round(oneRepMax),
-              date: workout.date,
-              workoutId: workout._id
+              date: session.startTime,
+              workoutId: session._id
             };
           }
         });
@@ -41,20 +43,20 @@ exports.getPersonalRecords = async (req, res) => {
 exports.getVolumeProgress = async (req, res) => {
   try {
     const { exerciseName } = req.params;
-    const { days } = req.query; // Number of days to look back
+    const { days } = req.query;
     
     const daysBack = days ? parseInt(days) : 30;
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - daysBack);
     
-    const workouts = await Workout.find({
+    const sessions = await WorkoutSession.find({
       userId: req.user.id,
-      date: { $gte: startDate },
+      startTime: { $gte: startDate },
       'exercises.name': exerciseName
-    }).sort({ date: 1 });
+    }).sort({ startTime: 1 });
     
-    const volumeData = workouts.map(workout => {
-      const exercise = workout.exercises.find(ex => ex.name === exerciseName);
+    const volumeData = sessions.map(session => {
+      const exercise = session.exercises.find(ex => ex.name === exerciseName);
       
       // Calculate total volume (weight × reps for all sets)
       const totalVolume = exercise.sets.reduce((sum, set) => {
@@ -62,7 +64,7 @@ exports.getVolumeProgress = async (req, res) => {
       }, 0);
       
       return {
-        date: workout.date,
+        date: session.startTime,
         volume: totalVolume,
         sets: exercise.sets.length
       };
@@ -79,13 +81,13 @@ exports.getStrengthProgress = async (req, res) => {
   try {
     const { exerciseName } = req.params;
     
-    const workouts = await Workout.find({
+    const sessions = await WorkoutSession.find({
       userId: req.user.id,
       'exercises.name': exerciseName
-    }).sort({ date: 1 });
+    }).sort({ startTime: 1 });
     
-    const strengthData = workouts.map(workout => {
-      const exercise = workout.exercises.find(ex => ex.name === exerciseName);
+    const strengthData = sessions.map(session => {
+      const exercise = session.exercises.find(ex => ex.name === exerciseName);
       
       // Find max weight used in this workout
       const maxWeight = Math.max(...exercise.sets.map(set => set.weight || 0));
@@ -94,7 +96,7 @@ exports.getStrengthProgress = async (req, res) => {
       const maxSet = exercise.sets.find(set => set.weight === maxWeight);
       
       return {
-        date: workout.date,
+        date: session.startTime,
         maxWeight: maxWeight,
         reps: maxSet ? maxSet.reps : 0
       };
@@ -115,16 +117,16 @@ exports.getWorkoutFrequency = async (req, res) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - (weeksBack * 7));
     
-    const workouts = await Workout.find({
+    const sessions = await WorkoutSession.find({
       userId: req.user.id,
-      date: { $gte: startDate }
-    }).sort({ date: 1 });
+      startTime: { $gte: startDate }
+    }).sort({ startTime: 1 });
     
     // Group by week
     const weeklyData = {};
     
-    workouts.forEach(workout => {
-      const date = new Date(workout.date);
+    sessions.forEach(session => {
+      const date = new Date(session.startTime);
       const weekStart = new Date(date);
       weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
       const weekKey = weekStart.toISOString().split('T')[0];
@@ -138,7 +140,7 @@ exports.getWorkoutFrequency = async (req, res) => {
       }
       
       weeklyData[weekKey].count++;
-      weeklyData[weekKey].totalDuration += workout.duration || 0;
+      weeklyData[weekKey].totalDuration += secondsToMinutes(session.totalDuration || 0);
     });
     
     const result = Object.values(weeklyData).sort((a, b) => 
@@ -160,9 +162,9 @@ exports.getMuscleGroupDistribution = async (req, res) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - daysBack);
     
-    const workouts = await Workout.find({
+    const sessions = await WorkoutSession.find({
       userId: req.user.id,
-      date: { $gte: startDate }
+      startTime: { $gte: startDate }
     });
     
     const muscleGroups = {
@@ -174,9 +176,8 @@ exports.getMuscleGroupDistribution = async (req, res) => {
       core: 0
     };
     
-    // This is simplified - ideally you'd reference Exercise model for categories
-    workouts.forEach(workout => {
-      workout.exercises.forEach(exercise => {
+    sessions.forEach(session => {
+      session.exercises.forEach(exercise => {
         const name = exercise.name.toLowerCase();
         
         if (name.includes('bench') || name.includes('chest') || name.includes('push')) {

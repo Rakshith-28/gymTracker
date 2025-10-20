@@ -1,5 +1,5 @@
- 
 const Workout = require('../models/Workout');
+const WorkoutSession = require('../models/WorkoutSession');
 const mongoose = require('mongoose');
 
 // Create new workout
@@ -8,7 +8,7 @@ exports.createWorkout = async (req, res) => {
     const { exercises, notes, duration, date } = req.body;
     
     const workout = await Workout.create({
-      userId: req.user.id,  // From auth middleware
+      userId: req.user.id,
       exercises,
       notes,
       duration,
@@ -141,22 +141,30 @@ exports.getExerciseHistory = async (req, res) => {
   }
 };
 
-// Get workout stats (total workouts, total exercises, etc.)
+// Get workout stats - UPDATED to include WorkoutSession data
+
+// Replace getWorkoutStats with this:
 exports.getWorkoutStats = async (req, res) => {
   try {
-    const workouts = await Workout.find({ userId: req.user.id });
+    const sessions = await WorkoutSession.find({ userId: req.user.id });
     
-    const totalWorkouts = workouts.length;
-    const totalExercises = workouts.reduce((sum, workout) => sum + workout.exercises.length, 0);
-    const totalDuration = workouts.reduce((sum, workout) => sum + (workout.duration || 0), 0);
+    const totalWorkouts = sessions.length;
+    const totalExercises = sessions.reduce((sum, session) => sum + session.exercises.length, 0);
+    
+    // Convert seconds to minutes
+    const totalDuration = sessions.reduce((sum, session) => {
+      return sum + Math.round((session.totalDuration || 0) / 60);
+    }, 0);
     
     // Find most recent workout
-    const recentWorkout = workouts.length > 0 ? workouts[0].date : null;
+    const recentWorkout = sessions.length > 0 
+      ? sessions.sort((a, b) => new Date(b.startTime) - new Date(a.startTime))[0].startTime
+      : null;
     
     // Count exercises done
     const exerciseCount = {};
-    workouts.forEach(workout => {
-      workout.exercises.forEach(exercise => {
+    sessions.forEach(session => {
+      session.exercises.forEach(exercise => {
         exerciseCount[exercise.name] = (exerciseCount[exercise.name] || 0) + 1;
       });
     });

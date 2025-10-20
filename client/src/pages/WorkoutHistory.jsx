@@ -70,7 +70,7 @@ function WorkoutHistory() {
       <h2>Workout History</h2>
       
       {workouts.length === 0 ? (
-        <p>No workouts logged yet. <a href="/log-workout">Log your first workout!</a></p>
+        <p>No workouts logged yet.</p>
       ) : (
         workouts.map(workout => (
           <div key={workout._id} style={{ 

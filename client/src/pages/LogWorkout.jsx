@@ -78,7 +78,7 @@ function LogWorkout() {
         .filter(ex => ex.sets.length > 0);
 
       if (validExercises.length === 0) {
-        setError('Please add at least one exercise with sets');
+        setError('Please addfffff at least one exercise with sets');
         return;
       }
 
