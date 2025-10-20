@@ -10,6 +10,8 @@ import EditWorkout from './pages/EditWorkout';
 import WorkoutHistory from './pages/WorkoutHistory';
 import Profile from './pages/Profile';
 import Analytics from './pages/Analytics';
+import StartSession from './pages/StartSession';
+
 
 function App() {
   // Use useLocation hook to get the current URL path
@@ -37,6 +39,7 @@ function App() {
         <Route path="/history" element={<WorkoutHistory />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/start-session" element={<StartSession />} />
       </Routes>
     </>
   );

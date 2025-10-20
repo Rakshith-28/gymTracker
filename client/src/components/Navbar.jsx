@@ -62,7 +62,9 @@ function Navbar() {
             <Link to="/history" className={styles.navLink}>History</Link>
             <Link to="/analytics" className={styles.navLink}>Analytics</Link>
             <Link to="/profile" className={styles.navLink}>Profile</Link>
-            
+            <Link to="/start-session" style={{ color: 'white', textDecoration: 'none' }}>
+  Start Session
+</Link>
             <button
               onClick={handleLogout}
               className={`${styles.button} ${styles.secondaryButton}`}
