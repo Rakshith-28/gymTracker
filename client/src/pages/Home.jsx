@@ -53,11 +53,11 @@ function Home() {
               Ready to crush your goals? Every rep, every set, every step counts. Let's get to work.
             </p>
             <div className={styles.ctaContainer}>
-              <Link to="/workouts" className={`${styles.button} ${styles.primaryButton}`}>
-                Log a Workout
+              <Link to="/start-session" className={`${styles.button} ${styles.primaryButton}`}>
+                Start Session
               </Link>
-              <Link to="/dashboard" className={`${styles.button} ${styles.secondaryButton}`}>
-                View Dashboard
+              <Link to="/analytics" className={`${styles.button} ${styles.secondaryButton}`}>
+                View Analytics
               </Link>
             </div>
           </>

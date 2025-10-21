@@ -18,10 +18,22 @@ const DumbbellIcon = () => (
   </svg>
 );
 
+function safeParseUser(raw) {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) {
+    // If something stored a non-JSON value, clean it up to prevent future crashes
+    try { localStorage.removeItem('user'); } catch (_) {}
+    return {};
+  }
+}
+
 function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  // Adopted the user object check from the HEAD branch to display the name
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  // Safely parse user from localStorage (avoid render crashes on invalid JSON)
+  const user = safeParseUser(localStorage.getItem('user'));
   const navigate = useNavigate();
 
   // Use useEffect to check login status once on mount (adopted from feature branch)

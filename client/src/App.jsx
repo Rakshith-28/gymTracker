@@ -1,5 +1,6 @@
 import { Routes, Route, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Import all necessary pages
 import Home from './pages/Home';
@@ -10,6 +11,7 @@ import WorkoutHistory from './pages/WorkoutHistory';
 import Profile from './pages/Profile';
 import Analytics from './pages/Analytics';
 import StartSession from './pages/StartSession';
+import NotFound from './pages/NotFound';
 
 
 function App() {
@@ -24,7 +26,7 @@ function App() {
 
   return (
     // Note: The <BrowserRouter> tag must be outside of App.jsx, usually in main.jsx
-    <>
+    <ErrorBoundary>
       {/* Conditionally render the Navbar component */}
       {shouldShowNavbar && <Navbar />}
       
@@ -39,8 +41,9 @@ function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/start-session" element={<StartSession />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
-    </>
+    </ErrorBoundary>
   );
 }
 
