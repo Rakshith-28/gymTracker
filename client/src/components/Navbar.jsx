@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import styles from './Navbar.module.css';
+import { useWorkout } from '../context/WorkoutContext.jsx';
 
 // Self-contained SVG icon for the logo (adopted from the feature branch)
 const DumbbellIcon = () => (
@@ -35,6 +36,7 @@ function Navbar() {
   // Safely parse user from localStorage (avoid render crashes on invalid JSON)
   const user = safeParseUser(localStorage.getItem('user'));
   const navigate = useNavigate();
+  const { isSessionActive } = useWorkout();
 
   // Use useEffect to check login status once on mount (adopted from feature branch)
   useEffect(() => {
@@ -69,6 +71,12 @@ function Navbar() {
             {/* Display the welcome message with user name (from HEAD branch) */}
             <span className={styles.welcomeText}>Welcome, {user.name || 'User'}!</span>
             
+            {isSessionActive && (
+              <Link to="/workout-in-progress" className={styles.navLink} style={{ fontWeight: 800, color: '#22c55e' }}>
+                Return to Session
+              </Link>
+            )}
+
             {/* Logged-in links (updated: removed Log Workout) */}
             <Link to="/history" className={styles.navLink}>History</Link>
             <Link to="/analytics" className={styles.navLink}>Analytics</Link>

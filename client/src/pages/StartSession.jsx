@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import ExerciseSelector from '../components/ExerciseSelector.jsx';
+import styles from './StartSession.module.css';
+import { useWorkout } from '../context/WorkoutContext.jsx';
 
 function StartSession() {
-  const [sessionActive, setSessionActive] = useState(false);
+  const { isSessionActive, start, stop, setPhase: setGlobalPhase, totalTime, activeTime, restTime } = useWorkout();
+  // Keep local trackers for per-exercise timing
   const [sessionId, setSessionId] = useState(null);
   const [sessionStartTime, setSessionStartTime] = useState(null);
-  const [totalSeconds, setTotalSeconds] = useState(0);
   
   const [currentPhase, setCurrentPhase] = useState('idle'); // 'idle', 'exercise', 'rest'
   const [exerciseSeconds, setExerciseSeconds] = useState(0);
@@ -30,6 +32,10 @@ function StartSession() {
   
   const [performanceHistory, setPerformanceHistory] = useState({});
   const [sessionSummary, setSessionSummary] = useState(null);
+  // UI state: sidebar and info modal
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [dateTimeStr, setDateTimeStr] = useState('');
   
   const navigate = useNavigate();
 
@@ -55,16 +61,25 @@ function StartSession() {
     fetchData();
   }, []);
 
-  // Total workout timer
+  // Live date + time header (e.g., Thursday, Oct 23 | 9:43 PM)
   useEffect(() => {
-    let interval;
-    if (sessionActive) {
-      interval = setInterval(() => {
-        setTotalSeconds(prev => prev + 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [sessionActive]);
+    const formatDateTime = () => {
+      const now = new Date();
+      const day = now.toLocaleDateString(undefined, { weekday: 'long' });
+      const date = now.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const time = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+      return `${day}, ${date} | ${time}`;
+    };
+    const update = () => setDateTimeStr(formatDateTime());
+    update();
+    const id = setInterval(update, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Keep global phase in sync with page phase
+  useEffect(() => {
+    setGlobalPhase(currentPhase);
+  }, [currentPhase, setGlobalPhase]);
 
   // Exercise timer
   useEffect(() => {
@@ -103,11 +118,23 @@ function StartSession() {
       
       setSessionId(response.data._id);
       setSessionStartTime(new Date());
-      setSessionActive(true);
+      start();
       setCurrentPhase('idle');
     } catch (err) {
       alert('Failed to start session');
     }
+  };
+
+  const handleOpenInfoModal = () => setIsInfoModalOpen(true);
+  const handleCancelInfoModal = () => setIsInfoModalOpen(false);
+  const handleContinueInfoModal = async () => {
+    // Confirm, start session (if not already) and navigate to logging view
+    setIsInfoModalOpen(false);
+    if (!isSessionActive) {
+      await startSession();
+    }
+    // Route alias for in-progress view
+    navigate('/workout-in-progress');
   };
 
   const selectExercise = async (exerciseName) => {
@@ -214,7 +241,7 @@ function StartSession() {
       // Update session with all exercises
       await axios.put(`http://localhost:5000/api/sessions/${sessionId}`, {
         exercises,
-        totalDuration: totalSeconds,
+        totalDuration: totalTime,
         totalActiveDuration,
         totalRestDuration
       }, {
@@ -250,7 +277,7 @@ function StartSession() {
       });
       setSessionSummary({
         sessionId,
-        totalDuration: totalSeconds,
+        totalDuration: totalTime,
         totalActiveDuration,
         totalRestDuration,
         exercises: perExercise,
@@ -262,7 +289,8 @@ function StartSession() {
         feeling: sessionFeeling,
         server: response?.data || null
       });
-      setSessionActive(false);
+      stop();
+      setCurrentPhase('idle');
     } catch (err) {
       alert('Failed to finish session');
     }
@@ -303,8 +331,9 @@ function StartSession() {
     background: bg, color, boxShadow: '0 8px 20px rgba(0,0,0,0.3)'
   });
 
-  const activeElapsed = exercises.reduce((sum, ex) => sum + (ex.duration || 0), 0) + (currentPhase === 'exercise' ? exerciseSeconds : 0);
-  const restElapsed = exercises.reduce((sum, ex) => sum + (ex.restAfter || 0), 0) + (currentPhase === 'rest' ? restSeconds : 0);
+  // Use global totals for main timers as requested
+  const activeElapsed = activeTime;
+  const restElapsed = restTime;
   const exerciseTabs = [
     ...(currentPhase === 'exercise' && selectedExercise ? [{ name: selectedExercise, live: true, seconds: exerciseSeconds }] : []),
     ...exercises.map(e => ({ name: e.name, live: false, seconds: e.duration || 0 }))
@@ -320,15 +349,10 @@ function StartSession() {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: 18, marginBottom: 24, position: 'sticky', top: 12, zIndex: 5, backdropFilter: 'blur(6px)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={pill('linear-gradient(90deg,#34d399,#10b981)')}>{sessionSummary ? 'Session Finished' : (sessionActive ? 'Active Session' : 'No Session')}</div>
-            <h2 style={{ color: '#f4f7ff', margin: 0 }}>{sessionSummary ? 'Session Summary' : 'Start Session'}</h2>
-          </div>
+          <div className={styles.dateTimeHeader}>{dateTimeStr}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {(sessionActive || sessionSummary) && (
-              <span style={pill('rgba(255,255,255,0.08)')}>Total {formatTime(totalSeconds)}</span>
-            )}
-            <button onClick={() => navigate('/history')} style={button('linear-gradient(90deg,#6366f1,#8b5cf6)')}>History</button>
+            {/* Removed redundant Total time chip from top bar */}
+            <button onClick={() => setIsSidebarOpen(true)} style={button('linear-gradient(90deg,#6366f1,#8b5cf6)')}>View Last Workout</button>
           </div>
         </div>
 
@@ -401,12 +425,12 @@ function StartSession() {
             </div>
           </div>
   ) : (
-  !sessionActive ? (
+  !isSessionActive ? (
           <div style={{ ...card(true), padding: 28, textAlign: 'center' }}>
             <div style={{ color: '#c9d3ff', marginBottom: 8 }}>Ready to train?</div>
             <h1 style={{ color: '#ffffff', marginTop: 0, marginBottom: 16 }}>Start a New Workout Session</h1>
             <div style={{ color: '#aab6ff', marginBottom: 24 }}>Track exercises, sets, and rest with a live timer and finish with a clean summary.</div>
-            <button onClick={startSession} style={button('linear-gradient(90deg,#22c55e,#16a34a)')}>🏋️ Start Session</button>
+            <button onClick={handleOpenInfoModal} style={button('linear-gradient(90deg,#22c55e,#16a34a)')}>🏋️ Start Session</button>
 
             {templates && templates.length > 0 && (
               <div style={{ marginTop: 24 }}>
@@ -427,7 +451,7 @@ function StartSession() {
               <div style={{ ...card(true), display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, alignItems: 'center' }}>
                 <div>
                   <div style={labelStyle}>Total Time</div>
-                  <div style={{ color: '#fff', fontSize: 32, fontWeight: 800 }}>{formatTime(totalSeconds)}</div>
+                  <div style={{ color: '#fff', fontSize: 32, fontWeight: 800 }}>{formatTime(totalTime)}</div>
                 </div>
                 <div>
                   <div style={labelStyle}>Active</div>
@@ -458,7 +482,7 @@ function StartSession() {
               {currentPhase !== 'exercise' && (
                 <div style={{ ...card(false) }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <h3 style={sectionTitle}>Select Next Exercise</h3>
+                    <h3 style={sectionTitle}>Select Exercise</h3>
                     {currentPhase === 'rest' && <span style={pill('rgba(251,191,36,0.15)', '#ffd27a')}>Rest {formatTime(restSeconds)}</span>}
                   </div>
                   <ExerciseSelector exercises={exerciseLibrary} onSelect={selectExercise} placeholder="Choose an exercise..." />
@@ -579,6 +603,38 @@ function StartSession() {
           </div>
         ))}
       </div>
+
+      {/* Sidebar Modal: Last Workout */}
+      <div className={`${styles.sidebar} ${isSidebarOpen ? styles.sidebarOpen : ''}`}>
+        <div className={styles.sidebarHeader}>
+          <h3>Last Workout</h3>
+          <button className={styles.closeButton} onClick={() => setIsSidebarOpen(false)}>Close</button>
+        </div>
+        <div className={styles.sidebarContent}>
+          {/* Placeholder summary data */}
+          <div className={styles.sidebarItem}><span className={styles.label}>Name:</span> Push Day</div>
+          <div className={styles.sidebarItem}><span className={styles.label}>Date:</span> {new Date().toLocaleDateString()}</div>
+          <div className={styles.sidebarItem}><span className={styles.label}>Summary:</span> Bench Press 5x5, OHP 3x8, Triceps 3x12</div>
+        </div>
+      </div>
+  {isSidebarOpen && <div className={styles.overlay} onClick={() => setIsSidebarOpen(false)} />}
+
+      {/* Information/Confirmation Modal */}
+      {isInfoModalOpen && (
+        <>
+          <div className={styles.overlay} onClick={handleCancelInfoModal} />
+          <div className={styles.modal} role="dialog" aria-modal="true">
+            <div className={styles.modalContent}>
+              <h2 style={{ marginTop: 0 }}>Ready to train?</h2>
+              <p style={{ color: '#c9d3ff' }}>Start a new workout session with live timers, exercise tracking, and a clean summary when you finish.</p>
+              <div className={styles.modalActions}>
+                <button className={styles.secondaryBtn} onClick={handleCancelInfoModal}>Cancel</button>
+                <button className={styles.primaryBtn} onClick={handleContinueInfoModal}>Continue</button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

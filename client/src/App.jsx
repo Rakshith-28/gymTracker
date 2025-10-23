@@ -3,6 +3,7 @@ import Navbar from './components/Navbar';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import { isTokenValid } from './utils/auth';
+import { WorkoutProvider } from './context/WorkoutContext.jsx';
 
 // Import all necessary pages
 import Home from './pages/Home';
@@ -30,12 +31,13 @@ function App() {
 
   return (
     // Note: The <BrowserRouter> tag must be outside of App.jsx, usually in main.jsx
-    <ErrorBoundary>
-      {/* Conditionally render the Navbar component */}
-      {shouldShowNavbar && <Navbar />}
-      
-      {/* Define all application routes */}
-      <Routes>
+    <WorkoutProvider>
+      <ErrorBoundary>
+        {/* Conditionally render the Navbar component */}
+        {shouldShowNavbar && <Navbar />}
+        
+        {/* Define all application routes */}
+        <Routes>
         {/* Default route: send unauthenticated users to login */}
         <Route path="/" element={authed ? <Home /> : <Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
@@ -46,9 +48,12 @@ function App() {
   <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
   <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
   <Route path="/start-session" element={<ProtectedRoute><StartSession /></ProtectedRoute>} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </ErrorBoundary>
+  {/* Alias route for in-progress session view */}
+  <Route path="/workout-in-progress" element={<ProtectedRoute><StartSession /></ProtectedRoute>} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </ErrorBoundary>
+    </WorkoutProvider>
   );
 }
 
