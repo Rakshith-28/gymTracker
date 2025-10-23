@@ -1,7 +1,8 @@
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
+import { isTokenValid } from './utils/auth';
 
 // Import all necessary pages
 import Home from './pages/Home';
@@ -18,6 +19,8 @@ import NotFound from './pages/NotFound';
 function App() {
   // Use useLocation hook to get the current URL path
   const location = useLocation();
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const authed = token && isTokenValid(token);
   
   // Array of paths where the Navbar should be hidden
   const hideNavbarOn = ['/login', '/register'];
@@ -33,7 +36,8 @@ function App() {
       
       {/* Define all application routes */}
       <Routes>
-        <Route path="/" element={<Home />} />
+        {/* Default route: send unauthenticated users to login */}
+        <Route path="/" element={authed ? <Home /> : <Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
   {/* Removed /log-workout route */}
