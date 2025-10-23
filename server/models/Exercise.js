@@ -15,8 +15,17 @@ const exerciseSchema = new mongoose.Schema({
     type: String,
     enum: ['barbell', 'dumbbell', 'machine', 'bodyweight', 'cable', 'other']
   },
+  // Legacy field: union of primary + secondary; kept for backward compatibility
   muscleGroup: {
     type: [String]  // Can target multiple muscles
+  },
+  // New structured fields: primary and secondary
+  primaryMuscle: {
+    type: String
+  },
+  secondaryMuscles: {
+    type: [String],
+    default: []
   },
   instructions: {
     type: String
