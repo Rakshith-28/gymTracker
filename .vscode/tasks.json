@@ -1,0 +1,27 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run server smoke test",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"server/scripts/smokeProfile.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run server smoke test",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"server/scripts/smokeProfile.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		}
+	]
+}

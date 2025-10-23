@@ -1,6 +1,7 @@
 import { Routes, Route, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ErrorBoundary from './components/ErrorBoundary';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Import all necessary pages
 import Home from './pages/Home';
@@ -36,11 +37,11 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
   {/* Removed /log-workout route */}
-        <Route path="/edit-workout/:id" element={<EditWorkout />} />
-        <Route path="/history" element={<WorkoutHistory />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/start-session" element={<StartSession />} />
+  <Route path="/edit-workout/:id" element={<ProtectedRoute><EditWorkout /></ProtectedRoute>} />
+  <Route path="/history" element={<ProtectedRoute><WorkoutHistory /></ProtectedRoute>} />
+  <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+  <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+  <Route path="/start-session" element={<ProtectedRoute><StartSession /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </ErrorBoundary>

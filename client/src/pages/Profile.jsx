@@ -1,109 +1,190 @@
 import { useState, useEffect, useMemo } from 'react';
+import styles from './Profile.module.css';
 import axios from 'axios';
+// Inline the edit form to avoid cursor jump issues
+import ReadOnlyProfileView from '../components/profile/ReadOnlyProfileView';
+import AccountSettings from '../components/profile/AccountSettings';
+import ActivityCalendar from '../components/profile/ActivityCalendar';
+import StreakCard from '../components/profile/StreakCard';
 
 function Profile() {
-  // Profile state
-  const [user, setUser] = useState({ name: '', email: '', createdAt: '' });
-  const [editing, setEditing] = useState(false);
+  // User state
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  // Edit form state (inline to prevent remount/focus issues)
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [age, setAge] = useState('');
+  const [gender, setGender] = useState('prefer_not_to_say');
+  const [heightCm, setHeightCm] = useState('');
+  const [unit, setUnit] = useState('kg');
+  const [weightInput, setWeightInput] = useState('');
+  const [bio, setBio] = useState('');
+  const [profilePicture, setProfilePicture] = useState('');
+  const [country, setCountry] = useState('');
+  const [unitSystem, setUnitSystem] = useState('metric');
+
+  // Password change
   const [changingPassword, setChangingPassword] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
 
-  // Lightweight activity stats
-  const [entries, setEntries] = useState([]); // workouts + sessions dates only
+  // Activity
+  const [activityDays, setActivityDays] = useState([]);
+  const [streaks, setStreaks] = useState({ currentStreak: 0, bestStreak: 0 });
 
   // Styles
-  const bgStyle = {
-    minHeight: '100vh',
-    padding: '32px 16px 64px',
-    background: 'linear-gradient(135deg, #0b1020 0%, #121b3a 60%, #1a234a 100%)',
-    position: 'relative'
-  };
-  const gridOverlay = {
-    position: 'absolute', inset: 0,
-    backgroundImage: 'radial-gradient(1px 1px at 20px 20px, rgba(255,255,255,0.08), rgba(0,0,0,0) 40px)',
-    backgroundSize: '40px 40px', pointerEvents: 'none'
-  };
-  const container = { maxWidth: 1000, margin: '0 auto', position: 'relative' };
+  const bgStyle = { minHeight: '100vh', position: 'relative' };
+  const gridOverlay = { position: 'absolute', inset: 0 };
+  const container = { maxWidth: 1100, margin: '0 auto', position: 'relative' };
   const card = (accent = false) => ({
     background: 'rgba(255,255,255,0.06)',
     border: '1px solid rgba(255,255,255,0.12)',
     borderRadius: 16,
     padding: 20,
-    boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
-    ...(accent ? { borderImage: 'linear-gradient(90deg, #6ee7f9, #a78bfa) 1', borderWidth: 1, borderStyle: 'solid' } : {})
+    boxShadow: '0 12px 32px rgba(0,0,0,0.35)'
   });
-  const label = { color: '#c9d3ff', fontSize: 13, marginBottom: 6, display: 'block' };
-  const input = { width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#fff' };
   const button = (bg, color = '#fff') => ({ padding: '12px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, background: bg, color });
 
-  // Derived
   const initials = useMemo(() => (user?.name || 'U').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase(), [user?.name]);
   const joined = useMemo(() => user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—', [user?.createdAt]);
 
-  // Stats
-  const totalWorkouts = entries.length;
-  const thisMonth = useMemo(() => {
-    const now = new Date();
-    return entries.filter(d => {
-      const x = new Date(d);
-      return x.getMonth() === now.getMonth() && x.getFullYear() === now.getFullYear();
-    }).length;
-  }, [entries]);
-  const streak = useMemo(() => {
-    if (!entries.length) return 0;
-    const days = new Set(entries.map(d => new Date(d).toDateString()));
-    let s = 0; const today = new Date();
-    // count backwards until a day with no entry
-    for (let i = 0; ; i++) {
-      const d = new Date(); d.setDate(today.getDate() - i);
-      if (days.has(d.toDateString())) s++; else break;
+  // Display helpers for read-only card
+  const weightUnitPref = useMemo(() => user?.preferences?.weightUnit || localStorage.getItem('pref.weightUnit') || 'kg', [user]);
+  const displayWeight = useMemo(() => {
+    if (!user?.weightKg && user?.weightKg !== 0) return '—';
+    const value = weightUnitPref === 'lbs' ? (user.weightKg / 0.45359237) : user.weightKg;
+    return `${Number(value.toFixed(1))} ${weightUnitPref}`;
+  }, [user, weightUnitPref]);
+
+  // Helpers to sync inline edit form with canonical user
+  const resetFromUser = (u = user) => {
+    if (!u) return;
+    setName(u.name || '');
+    setEmail(u.email || '');
+    setAge(typeof u.age === 'number' ? String(u.age) : (u.age || ''));
+    setGender(u.gender || 'prefer_not_to_say');
+    setHeightCm(typeof u.heightCm === 'number' ? String(u.heightCm) : (u.heightCm || ''));
+    const prefUnit = u?.preferences?.weightUnit || localStorage.getItem('pref.weightUnit') || 'kg';
+    setUnit(prefUnit);
+    if (typeof u.weightKg === 'number') {
+      const val = prefUnit === 'lbs' ? (u.weightKg / 0.45359237) : u.weightKg;
+      setWeightInput(String(Number(val.toFixed(1))));
+    } else {
+      setWeightInput('');
     }
-    return s;
-  }, [entries]);
+    setBio(u.bio || '');
+    setProfilePicture(u.profilePicture || '');
+    setCountry(u.country || '');
+    setUnitSystem(u.unitSystem || 'metric');
+  };
+
+  useEffect(() => { if (user && !isEditing) resetFromUser(user); }, [user]);
 
   useEffect(() => {
-    const fetchProfileAndActivity = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const headers = { Authorization: `Bearer ${token}` };
-        const [prof, wRes, sRes] = await Promise.all([
-          axios.get('http://localhost:5000/api/user/profile', { headers }),
-          axios.get('http://localhost:5000/api/workouts', { headers }).catch(() => ({ data: [] })),
-          axios.get('http://localhost:5000/api/sessions', { headers }).catch(() => ({ data: [] }))
-        ]);
-        const u = prof.data || {};
-        setUser(u);
-        setName(u.name || '');
-        setEmail(u.email || '');
-        const dates = [];
-        (Array.isArray(wRes.data) ? wRes.data : []).forEach(w => dates.push(w.date || w.createdAt));
-        (Array.isArray(sRes.data) ? sRes.data : []).forEach(s => dates.push(s.endTime || s.startTime || s.createdAt));
-        dates.sort((a, b) => new Date(b) - new Date(a));
-        setEntries(dates);
-      } catch (err) {
-        setError('Failed to load profile');
-      }
+    const applyStoredTheme = () => {
+      const theme = localStorage.getItem('pref.theme');
+      if (theme) document.documentElement.classList.toggle('dark', theme === 'dark');
     };
-    fetchProfileAndActivity();
+    applyStoredTheme();
   }, []);
 
-  const handleUpdateProfile = async (e) => {
-    e.preventDefault();
+  useEffect(() => {
+    const fetchAll = async () => {
+      setLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError('You are not logged in. Please sign in to view your profile.');
+          setLoading(false);
+          return;
+        }
+        const headers = { Authorization: `Bearer ${token}` };
+        const [prof, act] = await Promise.all([
+          axios.get('http://localhost:5000/api/user/profile', { headers }),
+          axios.get('http://localhost:5000/api/analytics/activity', { headers })
+        ]);
+        setUser(prof.data);
+        const { days = [], currentStreak = 0, bestStreak = 0 } = act.data || {};
+        setActivityDays(days);
+        setStreaks({ currentStreak, bestStreak });
+        setError('');
+      } catch (err) {
+        const status = err.response?.status;
+        if (status === 401) {
+          setError('Session expired or unauthorized. Please log in again.');
+        } else {
+          setError(err.response?.data?.message || 'Failed to load profile');
+        }
+        // Helpful for debugging in dev
+        if (import.meta?.env?.DEV) {
+          console.error('Profile load error', err);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAll();
+  }, []);
+
+  const handleSaveProfile = async (payload) => {
     try {
+      setSaving(true);
       const token = localStorage.getItem('token');
-      const response = await axios.put('http://localhost:5000/api/user/profile', { name, email }, { headers: { Authorization: `Bearer ${token}` } });
-      setUser(response.data);
-      localStorage.setItem('user', JSON.stringify(response.data));
-      setEditing(false);
-      setMessage('Profile updated successfully!');
+      const res = await axios.put('http://localhost:5000/api/user/profile', payload, { headers: { Authorization: `Bearer ${token}` } });
+      setUser(res.data);
+      setMessage('Profile updated successfully');
       setTimeout(() => setMessage(''), 3000);
+      setIsEditing(false);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Weight input change + conversion
+  const onWeightChange = (e) => {
+    const v = e.target.value;
+    setWeightInput(v);
+  };
+
+  // Construct payload from inline state
+  const saveInline = async (e) => {
+    e.preventDefault();
+    const payload = {
+      name,
+      email,
+      age: age === '' ? undefined : Number(age),
+      gender,
+      heightCm: heightCm === '' ? undefined : Number(heightCm),
+      weight: weightInput === '' ? undefined : Number(weightInput),
+      weightUnit: unit,
+      bio,
+      profilePicture,
+      country,
+      unitSystem,
+      preferences: { weightUnit: unit }
+    };
+    await handleSaveProfile(payload);
+  };
+
+  const cancelInline = () => {
+    resetFromUser();
+    setIsEditing(false);
+  };
+
+  const handlePrefsChange = async (prefs) => {
+    // Optimistically store in localStorage is already handled by component; sync to server
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put('http://localhost:5000/api/user/profile', { preferences: prefs }, { headers: { Authorization: `Bearer ${token}` } });
+    } catch (_) {
+      // non-blocking
     }
   };
 
@@ -122,112 +203,164 @@ function Profile() {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    if (!confirm('Are you sure you want to permanently delete your account? This cannot be undone.')) return;
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete('http://localhost:5000/api/user/account', { headers: { Authorization: `Bearer ${token}` } });
+      // Clear local auth and navigate to login
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to delete account');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: 'grid', placeItems: 'center', minHeight: '60vh', color: '#e8ecff' }}>Loading profile…</div>
+    );
+  }
+
   return (
-    <div style={bgStyle}>
-      <div style={gridOverlay} />
+  <div style={bgStyle} className="py-8 px-4 bg-linear-to-br from-slate-950 via-slate-900 to-slate-800 relative overflow-hidden">
+      <div style={gridOverlay} className="pointer-events-none">
+  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,var(--tw-gradient-stops))] from-emerald-500/10 via-transparent to-transparent" />
+      </div>
       <div style={container}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 56, height: 56, borderRadius: 9999, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#e8ecff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 20 }}>{initials}</div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-14 h-14 rounded-full bg-white/5 border border-white/15 text-indigo-100 flex items-center justify-center font-black text-lg">{initials}</div>
             <div>
-              <h2 style={{ color: '#f4f7ff', margin: 0 }}>User Profile</h2>
-              <div style={{ color: '#aab6ff', fontSize: 13 }}>Member since {joined}</div>
+              <h2 className="m-0 text-3xl md:text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-linear-to-r from-indigo-300 via-sky-300 to-emerald-300">Your Profile</h2>
+              <div className="text-indigo-200/80 text-sm">Member since {joined}</div>
             </div>
           </div>
         </div>
 
         {/* Alerts */}
         {message && (
-          <div style={{ ...card(false), borderColor: 'rgba(34,197,94,0.35)', background: 'rgba(34,197,94,0.12)', color: '#bbf7d0', marginBottom: 12 }}>✅ {message}</div>
+          <div className="mb-3 border border-emerald-500/30 bg-emerald-500/15 text-emerald-100 rounded-xl px-3 py-2">✅ {message}</div>
         )}
         {error && (
-          <div style={{ ...card(false), borderColor: 'rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.12)', color: '#fecaca', marginBottom: 12 }}>⚠️ {error}</div>
+          <div className="mb-3 border border-rose-500/30 bg-rose-500/15 text-rose-100 rounded-xl px-3 py-2">⚠️ {error}</div>
         )}
 
         {/* Content grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: 16 }}>
-          {/* Left: Profile Info */}
-          <div style={card(true)}>
-            <h3 style={{ color: '#e8ecff', marginTop: 0 }}>Profile Information</h3>
-            {!editing ? (
-              <div>
-                <div style={{ display: 'grid', gap: 10 }}>
-                  <div>
-                    <div style={label}>Name</div>
-                    <div style={{ color: '#e8ecff', fontWeight: 700 }}>{user.name || '—'}</div>
-                  </div>
-                  <div>
-                    <div style={label}>Email</div>
-                    <div style={{ color: '#e8ecff' }}>{user.email || '—'}</div>
-                  </div>
-                </div>
-                <div style={{ marginTop: 14 }}>
-                  <button onClick={() => setEditing(true)} style={button('linear-gradient(90deg,#22c55e,#16a34a)')}>Edit Profile</button>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleUpdateProfile}>
-                <div style={{ marginBottom: 12 }}>
-                  <label style={label}>Name</label>
-                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} required style={input} />
-                </div>
-                <div style={{ marginBottom: 12 }}>
-                  <label style={label}>Email</label>
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={input} />
-                </div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button type="submit" style={button('linear-gradient(90deg,#22c55e,#16a34a)')}>Save Changes</button>
-                  <button type="button" onClick={() => setEditing(false)} style={button('rgba(255,255,255,0.08)')}>Cancel</button>
-                </div>
-              </form>
-            )}
-          </div>
-
-          {/* Right: Quick Stats */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={card(false)}>
-              <h3 style={{ color: '#e8ecff', marginTop: 0 }}>Quick Stats</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                <Stat label="Total Workouts" value={totalWorkouts} color="#22c55e" />
-                <Stat label="This Month" value={thisMonth} color="#06b6d4" />
-                <Stat label="Current Streak" value={`${streak}d`} color="#a855f7" />
-              </div>
-            </div>
-
-            <div style={card(false)}>
-              <h3 style={{ color: '#e8ecff', marginTop: 0 }}>Change Password</h3>
-              {!changingPassword ? (
-                <button onClick={() => setChangingPassword(true)} style={button('linear-gradient(90deg,#3b82f6,#6366f1)')}>Change Password</button>
+  <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-4">
+          {/* Left: Profile editing & activity */}
+          <div style={{ display: 'grid', gap: 16 }}>
+            <div style={card(true)} className="relative rounded-2xl bg-white/5 ring-1 ring-white/10 backdrop-blur-md shadow-xl">
+              <div className="absolute -top-px left-6 right-6 h-px bg-linear-to-r from-emerald-400/60 via-cyan-400/60 to-violet-400/60" />
+              <h3 className={`${styles.cardHeading} text-indigo-50 mt-0`}>Profile Information</h3>
+              {!isEditing ? (
+                <ReadOnlyProfileView user={user} displayWeight={displayWeight} onEdit={() => { resetFromUser(); setIsEditing(true); }} />
               ) : (
-                <form onSubmit={handleChangePassword}>
-                  <div style={{ marginBottom: 12 }}>
-                    <label style={label}>Current Password</label>
-                    <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required style={input} />
+                <form onSubmit={saveInline} className="grid gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm text-indigo-100 mb-1 block font-medium">Name</label>
+                      <input className="w-full px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/60" value={name} onChange={(e) => setName(e.target.value)} required />
+                    </div>
+                    <div>
+                      <label className="text-sm text-indigo-100 mb-1 block font-medium">Email</label>
+                      <input className="w-full px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                    </div>
                   </div>
-                  <div style={{ marginBottom: 12 }}>
-                    <label style={label}>New Password</label>
-                    <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required style={input} />
+
+                  {/* Row 1: Name, Email stays above */}
+
+                  {/* Row 2: Country, Unit System */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm text-indigo-100 mb-1 block font-medium">Country</label>
+                      <input className="w-full px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40" value={country} onChange={(e) => setCountry(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-sm text-indigo-100 mb-1 block font-medium">Unit System</label>
+                      <select className="w-full px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40" value={unitSystem} onChange={(e) => setUnitSystem(e.target.value)}>
+                        <option value="metric">metric</option>
+                        <option value="imperial">imperial</option>
+                      </select>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <button type="submit" style={button('linear-gradient(90deg,#3b82f6,#6366f1)')}>Update</button>
-                    <button type="button" onClick={() => { setChangingPassword(false); setCurrentPassword(''); setNewPassword(''); }} style={button('rgba(255,255,255,0.08)')}>Cancel</button>
+
+                  {/* Row 3: Age, Gender, Height */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-sm text-indigo-100 mb-1 block font-medium">Age</label>
+                      <input className="w-full px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40" type="number" min="0" value={age} onChange={(e) => setAge(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-sm text-indigo-100 mb-1 block font-medium">Gender</label>
+                      <select className="w-full px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40" value={gender} onChange={(e) => setGender(e.target.value)}>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                        <option value="prefer_not_to_say">Prefer not to say</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-indigo-100 mb-1 block font-medium">Height (cm)</label>
+                      <input className="w-full px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40" type="number" min="0" step="0.1" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} />
+                    </div>
+                  </div>
+
+                  {/* Row 4: Weight (+ unit) and Profile Picture */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="text-sm text-indigo-100 mb-1 block font-medium">Weight ({unit})</label>
+                      <div className="flex gap-2">
+                        <input className="flex-1 px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40" type="number" min="0" step="0.1" value={weightInput} onChange={onWeightChange} />
+                        <select className="w-28 px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40" value={unit} onChange={(e) => setUnit(e.target.value)}>
+                          <option value="kg">kg</option>
+                          <option value="lbs">lbs</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm text-indigo-100 mb-1 block font-medium">Profile Picture (URL/Base64)</label>
+                      <input className="w-full px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40" value={profilePicture} onChange={(e) => setProfilePicture(e.target.value)} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-indigo-100 mb-1 block font-medium">Bio</label>
+                    <textarea className="w-full px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-white min-h-24 focus:outline-none focus:ring-2 focus:ring-emerald-500/40" value={bio} onChange={(e) => setBio(e.target.value)} />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg font-bold text-white bg-linear-to-r from-emerald-500 to-emerald-600 disabled:opacity-60 shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/20">
+                      {saving ? 'Saving…' : 'Save Changes'}
+                    </button>
+                    <button type="button" onClick={cancelInline} className="px-4 py-2 rounded-lg font-semibold text-white/90 bg-white/10 hover:bg-white/15">Cancel</button>
                   </div>
                 </form>
               )}
             </div>
+            <div style={card(false)} className="relative rounded-2xl bg-white/5 ring-1 ring-white/10 backdrop-blur-md shadow-xl">
+              <div className="absolute -top-px left-6 right-6 h-px bg-linear-to-r from-violet-400/60 via-cyan-400/60 to-emerald-400/60" />
+              <h3 className={`${styles.cardHeading} text-indigo-50 mt-0`}>Activity Calendar</h3>
+              <ActivityCalendar days={activityDays} />
+            </div>
+          </div>
+
+          {/* Right: Stats and account settings */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={card(false)} className="relative rounded-2xl bg-white/5 ring-1 ring-white/10 backdrop-blur-md shadow-xl">
+              <div className="absolute -top-px left-6 right-6 h-px bg-linear-to-r from-amber-400/60 via-pink-400/60 to-indigo-400/60" />
+              <StreakCard current={streaks.currentStreak} best={streaks.bestStreak} />
+            </div>
+            <AccountSettings
+              initialTheme={user?.preferences?.theme || localStorage.getItem('pref.theme') || 'light'}
+              initialUnitSystem={user?.unitSystem || 'metric'}
+              onUnitSystemSaved={(val) => setUser(u => ({ ...u, unitSystem: val }))}
+              onDeleteAccount={handleDeleteAccount}
+            />
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Stat({ label, value, color }) {
-  return (
-    <div style={{ padding: 12, borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)' }}>
-      <div style={{ fontSize: 12, color: '#aab6ff' }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 900, color }}>{value}</div>
     </div>
   );
 }

@@ -1,0 +1,57 @@
+/* Uniform styles for Profile page cards and headings */
+
+.cardHeading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0 0 0.25rem 0;
+  padding: 0.125rem 0; /* helps avoid clipping near rounded corners */
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* Formal, consistent option/label text inside Account Settings */
+.accountOptionLabel {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #d4d4d8; /* zinc-300 */
+}
+
+/* Compact button sizing to avoid oversized controls in the card */
+.btnSm {
+  font-size: 0.9rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.5rem;
+  line-height: 1;
+  min-height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Selected state for white-filled toggle buttons (ensure contrast) */
+.pillButtonSelected {
+  color: #18181b !important; /* zinc-900 */
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+
+.pillGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Slightly larger streak card spacing without overflowing */
+.streakHeading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-bottom: 0.75rem;
+}
+
+/* Increase vertical room for the streak card */
+.streakCard {
+  padding-block: 1.75rem; /* add breathing room */
+  min-height: 180px;
+}

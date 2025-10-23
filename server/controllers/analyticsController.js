@@ -201,3 +201,69 @@ exports.getMuscleGroupDistribution = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// Activity calendar and streaks
+exports.getActivitySummary = async (req, res) => {
+  try {
+    // Optional query: days (default 365)
+    const { days } = req.query;
+    const daysBack = days ? parseInt(days) : 365;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - daysBack);
+
+    const sessions = await WorkoutSession.find({
+      userId: req.user.id,
+      startTime: { $gte: startDate }
+    }).sort({ startTime: 1 });
+
+    // Collect unique workout days (YYYY-MM-DD)
+    const daySet = new Set();
+    sessions.forEach(s => {
+      const d = new Date(s.startTime);
+      const key = d.toISOString().split('T')[0];
+      daySet.add(key);
+    });
+    const daysWithWorkouts = Array.from(daySet).sort();
+
+    // Compute current and best streaks
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const hasDay = (date) => daySet.has(date.toISOString().split('T')[0]);
+
+    // Current streak (consecutive days up to today)
+    let currentStreak = 0;
+    for (let i = 0; ; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      if (hasDay(d)) currentStreak++; else break;
+    }
+
+    // Best streak by scanning backward over range
+    let bestStreak = 0;
+    let streak = 0;
+    // Build an ordered list of all dates in range
+    const allDates = [];
+    const cursor = new Date(today);
+    for (let i = 0; i <= daysBack; i++) {
+      const d = new Date(cursor);
+      d.setDate(cursor.getDate() - i);
+      allDates.push(d);
+    }
+    allDates.forEach(d => {
+      if (hasDay(d)) {
+        streak++;
+        if (streak > bestStreak) bestStreak = streak;
+      } else {
+        streak = 0;
+      }
+    });
+
+    res.json({
+      days: daysWithWorkouts,
+      currentStreak,
+      bestStreak
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
