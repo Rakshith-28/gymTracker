@@ -1,0 +1,6 @@
+.pageContainer {
+  max-width: 1280px;
+  margin: 0 auto; /* remove extra top margin */
+  padding: 0 20px; /* no top padding; sit directly under navbar */
+  box-sizing: border-box;
+}

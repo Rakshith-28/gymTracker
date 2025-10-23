@@ -6,7 +6,7 @@ import styles from './StartSession.module.css';
 import { useWorkout } from '../context/WorkoutContext.jsx';
 
 function StartSession() {
-  const { isSessionActive, start, stop, setPhase: setGlobalPhase, totalTime, activeTime, restTime, recordExercise } = useWorkout();
+  const { isSessionActive, start, stop, reset, setPhase: setGlobalPhase, totalTime, activeTime, restTime, recordExercise } = useWorkout();
   // Keep local trackers for per-exercise timing
   const [sessionId, setSessionId] = useState(null);
   const [sessionStartTime, setSessionStartTime] = useState(null);
@@ -60,6 +60,16 @@ function StartSession() {
     };
     fetchData();
   }, []);
+
+  // Rehydrate an active sessionId if present (e.g., after route change or refresh)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('activeSessionId');
+      if (saved && !sessionId) {
+        setSessionId(saved);
+      }
+    } catch {}
+  }, [sessionId]);
 
   // Live date + time header (e.g., Thursday, Oct 23 | 9:43 PM)
   useEffect(() => {
@@ -235,13 +245,20 @@ function StartSession() {
   const finishSession = async () => {
     try {
       const token = localStorage.getItem('token');
+      const effectiveSessionId = sessionId || (() => {
+        try { return localStorage.getItem('activeSessionId'); } catch { return null; }
+      })();
+      if (!effectiveSessionId) {
+        alert('No active session found. Please start a session first.');
+        return;
+      }
       
       // Calculate durations
       const totalActiveDuration = exercises.reduce((sum, ex) => sum + ex.duration, 0);
       const totalRestDuration = exercises.reduce((sum, ex) => sum + (ex.restAfter || 0), 0);
       
       // Update session with all exercises
-      await axios.put(`http://localhost:5000/api/sessions/${sessionId}`, {
+      await axios.put(`http://localhost:5000/api/sessions/${effectiveSessionId}`, {
         exercises,
         totalDuration: totalTime,
         totalActiveDuration,
@@ -251,50 +268,27 @@ function StartSession() {
       });
       
       // Finish session
-      const response = await axios.post(`http://localhost:5000/api/sessions/${sessionId}/finish`, {
+      await axios.post(`http://localhost:5000/api/sessions/${effectiveSessionId}/finish`, {
         notes: sessionNotes,
         feeling: sessionFeeling
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-
-      // Build local summary insights
-      const setCount = exercises.reduce((acc, ex) => acc + (ex.sets?.length || 0), 0);
-      const volumeTotal = exercises.reduce((acc, ex) => acc + (ex.sets || []).reduce((s, t) => s + ((Number(t.weight) || 0) * (Number(t.reps) || 0)), 0), 0);
-      const avgConfidence = exercises.length ? (exercises.reduce((acc, ex) => acc + (Number(ex.confidence) || 0), 0) / exercises.length) : 0;
-      const perExercise = exercises.map(ex => {
-        const exVolume = (ex.sets || []).reduce((s, t) => s + ((Number(t.weight) || 0) * (Number(t.reps) || 0)), 0);
-        const bestByWeight = (ex.sets || []).reduce((best, s) => (Number(s.weight) || 0) > (Number(best.weight) || 0) ? s : best, { weight: 0, reps: 0 });
-        const bestByVolume = (ex.sets || []).reduce((best, s) => ((Number(s.weight) || 0) * (Number(s.reps) || 0)) > (((Number(best.weight) || 0) * (Number(best.reps) || 0))) ? s : best, { weight: 0, reps: 0 });
-        return {
-          name: ex.name,
-          sets: ex.sets || [],
-          setCount: (ex.sets || []).length,
-          duration: ex.duration || 0,
-          restAfter: ex.restAfter || 0,
-          volume: exVolume,
-          bestByWeight,
-          bestByVolume
-        };
-      });
-      setSessionSummary({
-        sessionId,
-        totalDuration: totalTime,
-        totalActiveDuration,
-        totalRestDuration,
-        exercises: perExercise,
-        exerciseCount: exercises.length,
-        setCount,
-        volumeTotal,
-        avgConfidence,
-        notes: sessionNotes,
-        feeling: sessionFeeling,
-        server: response?.data || null
-      });
+      // After server saves succeed, end global session and reset timers/metrics
       stop();
-      setCurrentPhase('idle');
+      reset();
+      try { localStorage.removeItem('activeSessionId'); } catch {}
+      // Navigate away from the workout page
+      navigate('/history');
     } catch (err) {
-      alert('Failed to finish session');
+      console.error('Finish session error:', err?.response?.data || err?.message || err);
+      const status = err?.response?.status;
+      const msg = err?.response?.data?.message || err?.message || 'Failed to finish session';
+      alert(msg);
+      if (status === 401) {
+        try { localStorage.removeItem('token'); } catch {}
+        navigate('/login');
+      }
     }
   };
   // Premium styles shared with other pages

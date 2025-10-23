@@ -1,9 +1,9 @@
 .sidebar {
   position: fixed;
-  top: var(--navbar-height, 64px);
+  top: 0; /* extend behind navbar to avoid visible gap */
   left: 0;
   width: 280px;
-  height: calc(100vh - var(--navbar-height, 64px));
+  height: 100vh;
   background: rgba(12,16,36,0.96);
   border-right: 1px solid rgba(255,255,255,0.12);
   box-shadow: 12px 0 30px rgba(0,0,0,0.35);

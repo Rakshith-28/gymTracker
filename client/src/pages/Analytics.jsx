@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
 import ReactECharts from 'echarts-for-react';
 import MuscleMap from '../components/MuscleMap.jsx';
+import styles from './Analytics.module.css';
 
 const palette = {
   primary: '#7c3aed',
@@ -544,7 +545,7 @@ function Analytics() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(180deg,#0a0e27,#1a1a2e)' }}>
-      <div style={{ maxWidth: '1280px', margin: '40px auto', padding: '20px' }}>
+      <div className={styles.pageContainer}>
       {/* Header + Filters */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <h2 style={{ fontSize: 28, fontWeight: 800, color: '#f4f7ff' }}>Analytics Dashboard</h2>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import styles from './WorkoutHistory.module.css';
 
 function WorkoutHistory() {
   const [workouts, setWorkouts] = useState([]);
@@ -276,7 +277,7 @@ function WorkoutHistory() {
       minHeight: '100vh',
       background: 'radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(180deg,#0a0e27,#1a1a2e)'
     }}>
-      <div style={{ maxWidth: '1280px', margin: '40px auto', padding: 20 }}>
+      <div className={styles.pageContainer}>
       <TopBar
         query={query} setQuery={setQuery}
         typeFilter={typeFilter} setTypeFilter={setTypeFilter}
@@ -339,7 +340,7 @@ function WorkoutHistory() {
 function TopBar({ query, setQuery, typeFilter, setTypeFilter, sortBy, setSortBy, view, setView, thisMonthCount, streak, onExport }) {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+    <div className={styles.stickyTopBar}>
       <div style={{
         position: 'relative',
         background: 'rgba(255,255,255,0.06)',
