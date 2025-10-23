@@ -8,6 +8,12 @@ export function WorkoutProvider({ children }) {
   const [totalTime, setTotalTime] = useState(0);
   const [activeTime, setActiveTime] = useState(0);
   const [restTime, setRestTime] = useState(0);
+  // Lightweight summary so other pages can show context
+  const [summary, setSummary] = useState({
+    lastExerciseName: '',
+    exerciseCount: 0,
+    setCount: 0,
+  });
 
   const timerRef = useRef(null);
 
@@ -48,6 +54,21 @@ export function WorkoutProvider({ children }) {
     setActiveTime(0);
     setRestTime(0);
     setPhase('idle');
+    setSummary({ lastExerciseName: '', exerciseCount: 0, setCount: 0 });
+  };
+
+  const cancel = () => {
+    setIsSessionActive(false);
+    reset();
+    try { localStorage.removeItem('activeSessionId'); } catch {}
+  };
+
+  const recordExercise = (name, setsAdded = 0) => {
+    setSummary((s) => ({
+      lastExerciseName: name || s.lastExerciseName,
+      exerciseCount: (s.exerciseCount || 0) + 1,
+      setCount: (s.setCount || 0) + (Number(setsAdded) || 0),
+    }));
   };
 
   const value = useMemo(() => ({
@@ -57,10 +78,13 @@ export function WorkoutProvider({ children }) {
     totalTime,
     activeTime,
     restTime,
+    summary,
     // controls
     start,
     stop,
     reset,
+    cancel,
+    recordExercise,
     setPhase,
     setTotalTime,
     setActiveTime,

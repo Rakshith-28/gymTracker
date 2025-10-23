@@ -6,7 +6,7 @@ import styles from './StartSession.module.css';
 import { useWorkout } from '../context/WorkoutContext.jsx';
 
 function StartSession() {
-  const { isSessionActive, start, stop, setPhase: setGlobalPhase, totalTime, activeTime, restTime } = useWorkout();
+  const { isSessionActive, start, stop, setPhase: setGlobalPhase, totalTime, activeTime, restTime, recordExercise } = useWorkout();
   // Keep local trackers for per-exercise timing
   const [sessionId, setSessionId] = useState(null);
   const [sessionStartTime, setSessionStartTime] = useState(null);
@@ -116,10 +116,11 @@ function StartSession() {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      setSessionId(response.data._id);
+  setSessionId(response.data._id);
       setSessionStartTime(new Date());
       start();
       setCurrentPhase('idle');
+  try { localStorage.setItem('activeSessionId', response.data._id); } catch {}
     } catch (err) {
       alert('Failed to start session');
     }
@@ -223,7 +224,8 @@ function StartSession() {
       confidence: exerciseConfidence
     };
 
-    setExercises([...exercises, exerciseData]);
+  setExercises([...exercises, exerciseData]);
+  try { recordExercise(selectedExercise, exerciseData.sets?.length || 0); } catch {}
     setCurrentPhase('rest');
     setExerciseSeconds(0);
     setSelectedExercise('');

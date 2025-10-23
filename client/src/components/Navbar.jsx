@@ -71,11 +71,7 @@ function Navbar() {
             {/* Display the welcome message with user name (from HEAD branch) */}
             <span className={styles.welcomeText}>Welcome, {user.name || 'User'}!</span>
             
-            {isSessionActive && (
-              <Link to="/workout-in-progress" className={styles.navLink} style={{ fontWeight: 800, color: '#22c55e' }}>
-                Return to Session
-              </Link>
-            )}
+            {/* Return-to-Session removed to reduce navbar clutter; handled by ActiveSessionSidebar */}
 
             {/* Logged-in links (updated: removed Log Workout) */}
             <Link to="/history" className={styles.navLink}>History</Link>

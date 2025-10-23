@@ -1,0 +1,70 @@
+.sidebar {
+  position: fixed;
+  top: var(--navbar-height, 64px);
+  left: 0;
+  width: 280px;
+  height: calc(100vh - var(--navbar-height, 64px));
+  background: rgba(12,16,36,0.96);
+  border-right: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 12px 0 30px rgba(0,0,0,0.35);
+  backdrop-filter: blur(8px);
+  z-index: 900; /* below navbar (1000) */
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  padding: 14px 16px;
+  background: linear-gradient(90deg, rgba(6,182,212,0.18), rgba(59,130,246,0.18));
+  color: #e8ecff;
+  font-weight: 800;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+}
+
+.content {
+  padding: 14px 16px;
+  color: #c9d3ff;
+  display: grid;
+  gap: 10px;
+}
+
+.metric {
+  display: flex;
+  justify-content: space-between;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.actions {
+  margin-top: auto;
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.primaryBtn {
+  background: linear-gradient(90deg,#6366f1,#8b5cf6);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dangerBtn {
+  background: linear-gradient(90deg,#ef4444,#dc2626);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.hint {
+  color: #aab6ff;
+  font-size: 12px;
+}

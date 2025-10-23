@@ -4,6 +4,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import { isTokenValid } from './utils/auth';
 import { WorkoutProvider } from './context/WorkoutContext.jsx';
+import ActiveSessionSidebar from './components/ActiveSessionSidebar.jsx';
 
 // Import all necessary pages
 import Home from './pages/Home';
@@ -28,6 +29,7 @@ function App() {
   
   // Check if the current path is NOT in the hideNavbarOn array
   const shouldShowNavbar = !hideNavbarOn.includes(location.pathname);
+  const showActiveSidebar = authed && !hideNavbarOn.includes(location.pathname) && location.pathname !== '/workout-in-progress';
 
   return (
     // Note: The <BrowserRouter> tag must be outside of App.jsx, usually in main.jsx
@@ -35,8 +37,11 @@ function App() {
       <ErrorBoundary>
         {/* Conditionally render the Navbar component */}
         {shouldShowNavbar && <Navbar />}
+        {/* Sidebar for active session */}
+        {showActiveSidebar && <ActiveSessionSidebar />}
         
         {/* Define all application routes */}
+        <div style={{ marginLeft: showActiveSidebar ? 280 : 0 }}>
         <Routes>
         {/* Default route: send unauthenticated users to login */}
         <Route path="/" element={authed ? <Home /> : <Navigate to="/login" replace />} />
@@ -52,6 +57,7 @@ function App() {
   <Route path="/workout-in-progress" element={<ProtectedRoute><StartSession /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </div>
       </ErrorBoundary>
     </WorkoutProvider>
   );
