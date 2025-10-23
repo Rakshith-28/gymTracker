@@ -1,6 +1,7 @@
-import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ErrorBoundary from './components/ErrorBoundary';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Import all necessary pages
 import Home from './pages/Home';
@@ -32,49 +33,19 @@ function App() {
       
       {/* Define all application routes */}
       <Routes>
-        {/* Root -> Home, but protected: unauthenticated users go to /login */}
-        <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-
-        {/* Public auth routes: redirect to home if already logged in */}
-        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-        <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
-
-        {/* Protected application routes */}
-        <Route path="/edit-workout/:id" element={<ProtectedRoute><EditWorkout /></ProtectedRoute>} />
-        <Route path="/history" element={<ProtectedRoute><WorkoutHistory /></ProtectedRoute>} />
-        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-        <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-        <Route path="/start-session" element={<ProtectedRoute><StartSession /></ProtectedRoute>} />
-
-        {/* Fallback */}
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+  {/* Removed /log-workout route */}
+  <Route path="/edit-workout/:id" element={<ProtectedRoute><EditWorkout /></ProtectedRoute>} />
+  <Route path="/history" element={<ProtectedRoute><WorkoutHistory /></ProtectedRoute>} />
+  <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+  <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+  <Route path="/start-session" element={<ProtectedRoute><StartSession /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </ErrorBoundary>
   );
-}
-
-// Helpers to check auth and protect routes
-const isAuthenticated = () => {
-  try {
-    const token = localStorage.getItem('token');
-    return !!token;
-  } catch (_) {
-    return false;
-  }
-};
-
-function ProtectedRoute({ children }) {
-  if (!isAuthenticated()) {
-    return <Navigate to="/login" replace />;
-  }
-  return children;
-}
-
-function PublicRoute({ children }) {
-  if (isAuthenticated()) {
-    return <Navigate to="/" replace />;
-  }
-  return children;
 }
 
 export default App;

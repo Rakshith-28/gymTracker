@@ -5,7 +5,8 @@ const {
   getVolumeProgress,
   getStrengthProgress,
   getWorkoutFrequency,
-  getMuscleGroupDistribution
+  getMuscleGroupDistribution,
+  getActivitySummary
 } = require('../controllers/analyticsController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -17,5 +18,6 @@ router.get('/volume/:exerciseName', protect, getVolumeProgress);
 router.get('/strength/:exerciseName', protect, getStrengthProgress);
 router.get('/frequency', protect, getWorkoutFrequency);
 router.get('/muscle-distribution', protect, getMuscleGroupDistribution);
+router.get('/activity', protect, getActivitySummary);
 
 module.exports = router;
