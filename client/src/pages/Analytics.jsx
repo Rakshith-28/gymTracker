@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
 import ReactECharts from 'echarts-for-react';
+import MuscleMap from '../components/MuscleMap.jsx';
 
 const palette = {
   primary: '#7c3aed',
@@ -23,9 +24,14 @@ function Analytics() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('30d'); // '7d' | '30d' | '90d' | '365d'
   const [search, setSearch] = useState('');
-  const [dailyWorkouts, setDailyWorkouts] = useState([]); // for heatmap
+  const [dailyActivities, setDailyActivities] = useState([]); // workouts + sessions for heatmap and insights
   const [showAllPRs, setShowAllPRs] = useState(false);
   const [activeTab, setActiveTab] = useState('overview'); // overview | muscle | calendar | exercise
+  const [hoveredMuscle, setHoveredMuscle] = useState(null);
+  const [activeTotals, setActiveTotals] = useState({ active: 0, rest: 0 });
+  const [topExercisesByMuscle, setTopExercisesByMuscle] = useState({});
+  const [selectedMuscle, setSelectedMuscle] = useState(null);
+  const [exerciseLibrary, setExerciseLibrary] = useState([]);
 
   // Chart refs for potential export
   const freqRef = useRef(null);
@@ -43,25 +49,66 @@ function Analytics() {
         const headers = { Authorization: `Bearer ${token}` };
 
         const { weeks, days } = periodToWindow(period);
-        const [prsRes, statsRes, freqRes, muscleRes] = await Promise.all([
+        const [prsRes, statsRes, freqRes, muscleRes, libraryRes] = await Promise.all([
           axios.get('http://localhost:5000/api/analytics/prs', { headers }),
           axios.get('http://localhost:5000/api/workouts/stats', { headers }),
           axios.get(`http://localhost:5000/api/analytics/frequency?weeks=${weeks}`, { headers }),
-          axios.get(`http://localhost:5000/api/analytics/muscle-distribution?days=${days}`, { headers })
+          axios.get(`http://localhost:5000/api/analytics/muscle-distribution?days=${days}`, { headers }),
+          axios.get('http://localhost:5000/api/exercises', { headers }).catch(() => ({ data: [] }))
         ]);
 
         setPrs(prsRes.data || {});
         setStats(statsRes.data || null);
         setFrequency(freqRes.data || []);
         setMuscleDistribution(muscleRes.data || {});
+  setExerciseLibrary(Array.isArray(libraryRes.data) ? libraryRes.data : []);
 
         // Fetch daily workouts for heatmap via date-range endpoint
         const { startDate, endDate } = periodToDates(period);
-        const rangeRes = await axios.get(
-          `http://localhost:5000/api/workouts/date-range?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`,
-          { headers }
-        );
-        setDailyWorkouts(rangeRes.data || []);
+        const [rangeRes, sessionsRes] = await Promise.all([
+          axios.get(`http://localhost:5000/api/workouts/date-range?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`, { headers }).catch(() => ({ data: [] })),
+          axios.get('http://localhost:5000/api/sessions', { headers }).catch(() => ({ data: [] }))
+        ]);
+
+        const workouts = Array.isArray(rangeRes.data) ? rangeRes.data : [];
+        const sessions = Array.isArray(sessionsRes.data) ? sessionsRes.data : [];
+
+        // Filter sessions by period window and map to activity rows
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const sessionActivities = sessions
+          .filter(s => {
+            const d = new Date(s.endTime || s.startTime || s.createdAt);
+            return d >= start && d <= end;
+          })
+          .map(s => ({
+            date: s.endTime || s.startTime || s.createdAt,
+            duration: s.totalDuration || Math.round(((new Date(s.endTime) - new Date(s.startTime)) / 60000) || 0),
+            active: s.totalActiveDuration || 0,
+            rest: s.totalRestDuration || 0,
+            exercises: s.exercises || []
+          }));
+
+        const workoutActivities = workouts.map(w => ({
+          date: w.date || w.endTime || w.startTime || w.createdAt,
+          duration: w.duration || 0,
+          active: 0,
+          rest: 0,
+          exercises: w.exercises || []
+        }));
+
+        const activities = [...workoutActivities, ...sessionActivities];
+        setDailyActivities(activities);
+
+        // Aggregate active/rest totals for overview cards
+        const totals = activities.reduce((acc, a) => {
+          acc.active += a.active || 0;
+          acc.rest += a.rest || 0;
+          return acc;
+        }, { active: 0, rest: 0 });
+        setActiveTotals(totals);
+        // Defer building top exercises until we have library mapping
+        // (handled in separate effect below)
       } catch (err) {
         console.error('Error fetching analytics:', err);
       } finally {
@@ -70,6 +117,101 @@ function Analytics() {
     };
     fetchAnalytics();
   }, [period]);
+
+  // Build exercise name -> {primary, secondary[]} map from library
+  const nameToMuscles = useMemo(() => {
+    const map = new Map();
+    exerciseLibrary.forEach(ex => {
+      const key = (ex.name || '').toLowerCase();
+      const primary = (ex.primaryMuscle || '').toLowerCase();
+      const secondary = Array.isArray(ex.secondaryMuscles) ? ex.secondaryMuscles.map(s => (s || '').toLowerCase()) : [];
+      const legacy = Array.isArray(ex.muscleGroup) ? ex.muscleGroup.map(s => (s || '').toLowerCase()) : [];
+      const p = primary || legacy[0] || '';
+      const s = secondary.length ? secondary : legacy.filter(m => m !== p);
+      map.set(key, { primary: p, secondary: s });
+    });
+    return map;
+  }, [exerciseLibrary]);
+
+  // Stats by muscle group derived from activities
+  const statsByMuscle = useMemo(() => {
+    const acc = new Map();
+    dailyActivities.forEach(a => {
+      const minutes = a.duration || 0;
+      (a.exercises || []).forEach(ex => {
+        const nameKey = (ex.name || '').toLowerCase();
+        const setsCount = (ex.sets || []).length;
+        const map = nameToMuscles.get(nameKey);
+        if (map && map.primary) {
+          const pKey = normalizeGroupForStats(map.primary);
+          const cur = acc.get(pKey) || { count: 0, sets: 0, minutes: 0 };
+          acc.set(pKey, { count: cur.count + 1, sets: cur.sets + setsCount, minutes: cur.minutes + minutes });
+          (map.secondary || []).forEach(sg => {
+            const sKey = normalizeGroupForStats(sg);
+            const c = acc.get(sKey) || { count: 0, sets: 0, minutes: 0 };
+            acc.set(sKey, { count: c.count + 0.5, sets: c.sets + Math.round(setsCount * 0.5), minutes: c.minutes + (minutes * 0.5) });
+          });
+        } else {
+          const groups = inferGroupsFromName(ex.name || '');
+          groups.forEach(g => {
+            const cur = acc.get(g) || { count: 0, sets: 0, minutes: 0 };
+            acc.set(g, { count: cur.count + 1, sets: cur.sets + setsCount, minutes: cur.minutes + minutes });
+          });
+        }
+      });
+    });
+    const obj = {};
+    acc.forEach((v, k) => (obj[k] = v));
+    // Aggregate arms from biceps + triceps so clicking 'Arms' shows data
+    const bi = obj['biceps'];
+    const tri = obj['triceps'];
+    if (bi || tri) {
+      obj['arms'] = {
+        count: (bi?.count || 0) + (tri?.count || 0),
+        sets: (bi?.sets || 0) + (tri?.sets || 0),
+        minutes: (bi?.minutes || 0) + (tri?.minutes || 0)
+      };
+    }
+    return obj;
+  }, [dailyActivities, nameToMuscles]);
+
+  // Recompute top exercises per muscle whenever activities or library mapping changes
+  useEffect(() => {
+    const topMap = new Map();
+    dailyActivities.forEach(a => {
+      (a.exercises || []).forEach(ex => {
+        const nameKey = (ex.name || '').toLowerCase();
+        const map = nameToMuscles.get(nameKey);
+        const groups = map && map.primary
+          ? [normalizeGroupForStats(map.primary), ...(map.secondary || []).map(normalizeGroupForStats)]
+          : inferGroupsFromName(ex.name || '');
+        groups.forEach(g => {
+          const key = g;
+          if (!topMap.has(key)) topMap.set(key, new Map());
+          const m = topMap.get(key);
+          const count = m.get(ex.name) || 0;
+          m.set(ex.name, count + (ex.sets?.length || 1));
+        });
+      });
+    });
+    const topObj = {};
+    topMap.forEach((m, g) => {
+      const arr = Array.from(m.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, c]) => ({ name, count: c }));
+      topObj[g] = arr;
+    });
+    // Aggregate 'arms' from biceps + triceps
+    const bi = topMap.get('biceps');
+    const tri = topMap.get('triceps');
+    if (bi || tri) {
+      const merged = new Map();
+      [bi, tri].forEach(map => {
+        if (!map) return;
+        map.forEach((count, name) => merged.set(name, (merged.get(name) || 0) + count));
+      });
+      topObj['arms'] = Array.from(merged.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, c]) => ({ name, count: c }));
+    }
+    setTopExercisesByMuscle(topObj);
+  }, [dailyActivities, nameToMuscles]);
 
   const handleExerciseSelect = async (exerciseName) => {
     setSelectedExercise(exerciseName);
@@ -135,18 +277,30 @@ function Analytics() {
     return {
       backgroundColor: 'transparent',
       tooltip: { trigger: 'axis' },
-      grid: { left: 40, right: 20, bottom: 40, top: 20 },
-      xAxis: { type: 'category', data: labels, axisLabel: { rotate: 45 } },
-      yAxis: { type: 'value', name: 'Workouts' },
+      grid: { left: 50, right: 30, bottom: 40, top: 20 },
+      xAxis: {
+        type: 'category',
+        data: labels,
+        boundaryGap: false,
+        axisLabel: { color: '#cbd5e1' },
+        axisLine: { lineStyle: { color: '#475569' } }
+      },
+      yAxis: {
+        type: 'value',
+        name: 'Workouts',
+        axisLabel: { color: '#cbd5e1' },
+        axisLine: { lineStyle: { color: '#475569' } },
+        splitLine: { show: true, lineStyle: { color: 'rgba(148,163,184,0.15)' } }
+      },
       series: [
         {
           name: 'Workouts',
-          type: 'bar',
+          type: 'line',
+          smooth: true,
           data: counts,
-          itemStyle: {
-            color: getGradient(palette.primary, '#7c3aed33')
-          },
-          emphasis: { focus: 'series' },
+          areaStyle: { color: getGradient(palette.primary, '#7c3aed33') },
+          lineStyle: { color: palette.primary, width: 2 },
+          itemStyle: { color: palette.primary }
         }
       ]
     };
@@ -203,7 +357,7 @@ function Analytics() {
     const data = entries.map(([k, v]) => ({ name: k, value: Math.round((v / total) * 100) }));
     return {
       tooltip: { trigger: 'item', formatter: '{b}: {c}% ({d}%)' },
-      legend: { top: 'bottom' },
+      legend: { top: 'bottom', textStyle: { color: '#e8ecff' } },
       series: [
         {
           name: 'Workout Split',
@@ -211,8 +365,8 @@ function Analytics() {
           radius: ['45%', '75%'],
           avoidLabelOverlap: true,
           itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
-          label: { show: false },
-          emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
+          label: { show: false, color: '#e8ecff' },
+          emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold', color: '#e8ecff' } },
           labelLine: { show: false },
           data,
         }
@@ -226,9 +380,20 @@ function Analytics() {
     const durations = frequency.map(f => f.totalDuration || 0);
     return {
       tooltip: { trigger: 'axis' },
-      grid: { left: 40, right: 20, bottom: 40, top: 20 },
-      xAxis: { type: 'category', data: labels },
-      yAxis: { type: 'value', name: 'Minutes' },
+      grid: { left: 50, right: 30, bottom: 40, top: 20 },
+      xAxis: {
+        type: 'category',
+        data: labels,
+        boundaryGap: false,
+        axisLabel: { color: '#cbd5e1' },
+        axisLine: { lineStyle: { color: '#475569' } }
+      },
+      yAxis: {
+        type: 'value', name: 'Minutes',
+        axisLabel: { color: '#cbd5e1' },
+        axisLine: { lineStyle: { color: '#475569' } },
+        splitLine: { show: true, lineStyle: { color: 'rgba(148,163,184,0.15)' } }
+      },
       series: [
         {
           type: 'line',
@@ -242,13 +407,18 @@ function Analytics() {
     };
   }, [frequency]);
 
-  // Calendar heatmap (daily workouts in range)
+  // Calendar heatmap (interactive; intensity by sets). Tooltip shows workouts, sets, minutes
   const heatmapOption = useMemo(() => {
-    // Build date -> count map
-    const map = new Map();
-    dailyWorkouts.forEach(w => {
-      const key = new Date(w.date).toISOString().split('T')[0];
-      map.set(key, (map.get(key) || 0) + 1);
+    const statsByDay = new Map();
+    dailyActivities.forEach(a => {
+      const key = new Date(a.date).toISOString().split('T')[0];
+      const prev = statsByDay.get(key) || { count: 0, sets: 0, duration: 0 };
+      const setsCount = (a.exercises || []).reduce((s, ex) => s + (ex.sets?.length || 0), 0);
+      statsByDay.set(key, {
+        count: (prev.count || 0) + 1,
+        sets: (prev.sets || 0) + setsCount,
+        duration: (prev.duration || 0) + (a.duration || 0)
+      });
     });
     const { startDate, endDate } = periodToDates(period);
     const start = new Date(startDate);
@@ -256,22 +426,30 @@ function Analytics() {
     const days = [];
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const key = d.toISOString().split('T')[0];
-      days.push([key, map.get(key) || 0]);
+      const agg = statsByDay.get(key) || { count: 0, sets: 0, duration: 0 };
+      days.push([key, agg.sets]);
     }
+    const maxSets = Math.max(1, ...days.map(d => d[1]));
     return {
+      backgroundColor: 'transparent',
       tooltip: {
         position: 'top',
-        formatter: (p) => `${p.data[0]}: ${p.data[1]} workout(s)`
+        formatter: (p) => {
+          const key = p.data[0];
+          const agg = statsByDay.get(key) || { count: 0, sets: 0, duration: 0 };
+          return `${key}: ${agg.count} workout(s), ${agg.sets} sets, ${agg.duration} min`;
+        }
       },
       visualMap: {
-        min: 0, max: Math.max(1, Math.max(...days.map(d => d[1]))),
-        orient: 'horizontal', left: 'center', top: 0
+        min: 0, max: maxSets,
+        orient: 'horizontal', left: 'center', top: 0,
+        inRange: { color: ['#0ea5e933', '#06b6d4aa', '#7c3aed'] }
       },
       calendar: {
         top: 40, left: 20, right: 20, bottom: 20,
         cellSize: ['auto', 18],
         range: [startDate.split('T')[0], endDate.split('T')[0]],
-        itemStyle: { borderWidth: 0.5, borderColor: '#e5e7eb' },
+        itemStyle: { borderWidth: 0.5, borderColor: '#334155' },
         yearLabel: { show: false },
         monthLabel: { nameMap: 'en' },
         dayLabel: { nameMap: 'en' }
@@ -280,7 +458,7 @@ function Analytics() {
         { type: 'heatmap', coordinateSystem: 'calendar', data: days }
       ]
     };
-  }, [dailyWorkouts, period]);
+  }, [dailyActivities, period]);
 
   const strengthOption = useMemo(() => {
     const labels = strengthProgress.map(p => new Date(p.date).toLocaleDateString());
@@ -358,36 +536,30 @@ function Analytics() {
 
   if (loading) {
     return (
-      <div style={{ maxWidth: '1200px', margin: '50px auto', padding: '20px', textAlign: 'center' }}>
+      <div style={{ maxWidth: '1200px', margin: '50px auto', padding: '20px', textAlign: 'center', color: '#e8ecff' }}>
         <div style={{ fontSize: 22, opacity: 0.8 }}>Loading analytics...</div>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: '1280px', margin: '40px auto', padding: '20px' }}>
+    <div style={{ minHeight: '100vh', background: 'radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(180deg,#0a0e27,#1a1a2e)' }}>
+      <div style={{ maxWidth: '1280px', margin: '40px auto', padding: '20px' }}>
       {/* Header + Filters */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <h2 style={{ fontSize: 28, fontWeight: 800, color: '#f4f7ff' }}>Analytics Dashboard</h2>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search exercise PRs..."
-            style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e7eb' }}
-          />
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
-            style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontWeight: 600 }}
+            style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: '#e8ecff', fontWeight: 600 }}
           >
             <option value="7d">Last 7 days</option>
             <option value="30d">Last 30 days</option>
             <option value="90d">Last 3 months</option>
             <option value="365d">Last year</option>
           </select>
-          <button onClick={() => window.print()} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer' }}>Export</button>
+          <button onClick={() => window.print()} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: '#e8ecff', cursor: 'pointer' }}>Export</button>
         </div>
       </div>
 
@@ -417,40 +589,26 @@ function Analytics() {
         ))}
       </div>
 
-      {/* Overall Stats */}
-      {stats && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 24, marginTop: 16 }}>
+      {/* Overall Stats: only show on Overview */}
+      {stats && activeTab === 'overview' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 16, marginTop: 16 }}>
           <StatCard
             label="Total Workouts"
             value={stats.totalWorkouts}
             color={palette.accent}
             delta={computeDelta(frequency, 'count')}
-            sparkData={frequency.map(f => f.count)}
-            gridColumn="span 3"
+            sparkData={[]}
+            gridColumn="span 6"
+            big
           />
           <StatCard
-            label="Total Exercises"
-            value={stats.totalExercises}
-            color={palette.secondary}
-            delta={null}
-            sparkData={frequency.map(f => f.count)}
-            gridColumn="span 3"
-          />
-          <StatCard
-            label="Total Minutes"
-            value={stats.totalDuration}
+            label="Total Active Minutes"
+            value={activeTotals.active}
             color={palette.warn}
-            delta={computeDelta(frequency, 'totalDuration')}
-            sparkData={frequency.map(f => f.totalDuration)}
-            gridColumn="span 3"
-          />
-          <StatCard
-            label="Avg Duration (min)"
-            value={stats.averageDuration}
-            color={palette.purple}
             delta={null}
-            sparkData={frequency.map(f => f.totalDuration)}
-            gridColumn="span 3"
+            sparkData={[]}
+            gridColumn="span 6"
+            big
           />
         </div>
       )}
@@ -521,15 +679,15 @@ function Analytics() {
 
       {/* Overview Tab */}
       {activeTab === 'overview' && (
-        <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 24 }}>
-          <ChartCard title={`Workout Frequency (${periodLabel(period)})`} gridColumn="span 7">
+        <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 16 }}>
+          <ChartCard title={`Workout Frequency (${periodLabel(period)})`} gridColumn="span 6">
             {frequency.length === 0 ? (
-              <div style={{ opacity: 0.7 }}>No workout frequency data yet.</div>
+              <div style={{ opacity: 0.7, color: '#e8ecff' }}>No workout frequency data yet.</div>
             ) : (
               <ReactECharts ref={freqRef} option={frequencyOption} style={{ height: 340, width: '100%' }} notMerge={true} lazyUpdate={true} />
             )}
           </ChartCard>
-          <ChartCard title="Duration Trend" gridColumn="span 5">
+          <ChartCard title="Duration Trend" gridColumn="span 6">
             <ReactECharts ref={durationRef} option={durationOption} style={{ height: 340 }} notMerge={true} lazyUpdate={true} />
           </ChartCard>
           <ChartCard title="Workout Focus (Donut)" gridColumn="span 12">
@@ -540,56 +698,77 @@ function Analytics() {
 
       {/* Muscle Tab */}
       {activeTab === 'muscle' && (
-        <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 24 }}>
-          <ChartCard title={`Muscle Group Distribution (${periodLabel(period)})`} gridColumn="span 6">
-            {Object.keys(muscleDistribution || {}).length === 0 ? (
-              <div style={{ opacity: 0.7 }}>No muscle distribution data yet.</div>
+        <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 16 }}>
+          <div>
+            <MuscleMap selected={selectedMuscle} onSelect={(k) => setSelectedMuscle(k)} />
+          </div>
+
+          <div>
+            <div style={{ fontWeight: 800, marginBottom: 10, color: '#e8ecff' }}>{selectedMuscle ? `${capitalize(selectedMuscle)} Stats` : 'Pick a muscle'}</div>
+            {selectedMuscle ? (
+              (() => {
+                const norm = normalizeGroupForStats(selectedMuscle);
+                const k = norm;
+                const val = statsByMuscle[k] || { count: 0, minutes: 0 };
+                return (
+                  <div style={{ color: '#e8ecff' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
+                      <StatTile label="Workouts" value={Math.round(val.count || 0)} />
+                      <StatTile label="Minutes" value={Math.round(val.minutes || 0)} />
+                    </div>
+                    <div style={{ fontWeight: 700, marginBottom: 8 }}>Top Exercises</div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                      {(topExercisesByMuscle[k] || []).map(e => (
+                        <span key={e.name} style={{ padding: '6px 10px', borderRadius: 9999, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: '#e8ecff' }}>{e.name} · {e.count}</span>
+                      ))}
+                      {(topExercisesByMuscle[k] || []).length === 0 && <span style={{ opacity: 0.7 }}>—</span>}
+                    </div>
+                    {/* Small trend chart for this muscle */}
+                    <MiniTrend muscleKey={k} dailyActivities={dailyActivities} nameToMuscles={nameToMuscles} period={period} />
+                  </div>
+                );
+              })()
             ) : (
-              <ReactECharts ref={muscleRef} option={muscleOption} style={{ height: 360, width: '100%' }} notMerge={true} lazyUpdate={true} />
+              <div style={{ opacity: 0.7, color: '#aab6ff' }}>Rotate with the button or drag left/right. Click a region to view stats.</div>
             )}
-          </ChartCard>
-          <ChartCard title="Muscle Balance (Radar)" gridColumn="span 6">
-            <ReactECharts ref={radarRef} option={radarOption} style={{ height: 360 }} notMerge={true} lazyUpdate={true} />
-          </ChartCard>
+          </div>
         </div>
       )}
 
       {/* Calendar Tab */}
       {activeTab === 'calendar' && (
         <div style={{ marginTop: 24 }}>
-          <ChartCard title="Calendar Heatmap" gridColumn="span 12">
+          <ChartCard title="Calendar Heatmap (sets intensity)" gridColumn="span 12">
             <ReactECharts option={heatmapOption} style={{ height: 280 }} notMerge={true} lazyUpdate={true} />
           </ChartCard>
         </div>
       )}
 
-      {/* Comparison & Goals */}
-      <div style={{ marginTop: 32, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 24 }}>
-        <CompareCard title="Workouts" current={getLast(frequency, 'count')} previous={getPrev(frequency, 'count')} gridColumn="span 3" />
-        <CompareCard title="Minutes" current={getLast(frequency, 'totalDuration')} previous={getPrev(frequency, 'totalDuration')} gridColumn="span 3" />
-        <GoalsCard gridColumn="span 6" frequency={frequency} />
-      </div>
+      {/* Comparison & Goals removed for now */}
 
-      {/* Achievements */}
-      <div style={{ marginTop: 32 }}>
-        <h3 style={{ marginBottom: 12 }}>Recent Achievements</h3>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          {Object.entries(prs)
-            .sort((a, b) => new Date(b[1].date) - new Date(a[1].date))
-            .slice(0, 6)
-            .map(([name, pr]) => (
-              <div key={name} style={{ padding: '10px 14px', borderRadius: 9999, background: '#eef2ff', color: '#3730a3', fontWeight: 600 }}>
-                🏅 {name}: {pr.weight}×{pr.reps}
-              </div>
-            ))}
-          {Object.keys(prs).length === 0 && <div style={{ opacity: 0.7 }}>Log workouts to unlock achievements.</div>}
+      {/* Achievements: only show on Exercise tab */}
+      {activeTab === 'exercise' && (
+        <div style={{ marginTop: 32 }}>
+          <h3 style={{ marginBottom: 12, color: '#e8ecff' }}>Recent Achievements</h3>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {Object.entries(prs)
+              .sort((a, b) => new Date(b[1].date) - new Date(a[1].date))
+              .slice(0, 6)
+              .map(([name, pr]) => (
+                <div key={name} style={{ padding: '10px 14px', borderRadius: 9999, background: 'rgba(255,255,255,0.06)', color: '#e8ecff', border: '1px solid rgba(255,255,255,0.12)', fontWeight: 600 }}>
+                  🏅 {name}: {pr.weight}×{pr.reps}
+                </div>
+              ))}
+            {Object.keys(prs).length === 0 && <div style={{ opacity: 0.7, color: '#aab6ff' }}>Log workouts to unlock achievements.</div>}
+          </div>
         </div>
-    </div>
+      )}
+      </div>
     </div>
   );
 }
 
-function StatCard({ label, value, color, delta, sparkData = [], gridColumn = 'span 3' }) {
+function StatCard({ label, value, color, delta, sparkData = [], gridColumn = 'span 3', big = false }) {
   const option = {
     grid: { left: 0, right: 0, top: 10, bottom: 0 },
     xAxis: { type: 'category', show: false, data: sparkData.map((_, i) => i) },
@@ -601,20 +780,21 @@ function StatCard({ label, value, color, delta, sparkData = [], gridColumn = 'sp
       gridColumn,
       padding: '18px',
       borderRadius: 12,
-      border: '1px solid #e5e7eb',
-      background: 'linear-gradient(180deg, #ffffff, #fafafa)',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-      transition: 'transform 120ms ease, box-shadow 120ms ease'
+      border: '1px solid rgba(255,255,255,0.12)',
+      background: 'rgba(255,255,255,0.06)',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+      transition: 'transform 120ms ease, box-shadow 120ms ease',
+      color: '#e8ecff'
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <div style={{ fontSize: 13, color: '#64748b' }}>{label}</div>
+        <div style={{ fontSize: 13, color: '#aab6ff' }}>{label}</div>
         {delta && (
-          <div style={{ fontSize: 12, fontWeight: 700, color: delta.value >= 0 ? '#16a34a' : '#dc2626' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: delta.value >= 0 ? '#86efac' : '#fecaca' }}>
             {delta.value >= 0 ? '↑' : '↓'} {Math.abs(delta.percent)}%
           </div>
         )}
       </div>
-      <div style={{ fontSize: 34, fontWeight: 800, color, marginTop: 6 }}>{value}</div>
+  <div style={{ fontSize: big ? 42 : 34, fontWeight: 800, color, marginTop: 6 }}>{value}</div>
       {sparkData.length > 0 && (
         <div style={{ height: 40, marginTop: 6 }}>
           <ReactECharts option={option} style={{ height: 40 }} notMerge={true} lazyUpdate={true} />
@@ -630,14 +810,23 @@ function ChartCard({ title, children, gridColumn = 'span 12' }) {
       gridColumn,
       padding: 16,
       borderRadius: 12,
-      border: '1px solid #e5e7eb',
-      background: 'linear-gradient(180deg, #ffffff, #fbfbfb)',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+      border: '1px solid rgba(255,255,255,0.12)',
+      background: 'rgba(255,255,255,0.06)',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.25)'
     }}>
-      <div style={{ fontWeight: 800, marginBottom: 10, color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ fontWeight: 800, marginBottom: 10, color: '#e8ecff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 15 }}>{title}</span>
       </div>
       {children}
+    </div>
+  );
+}
+
+function StatTile({ label, value }) {
+  return (
+    <div style={{ padding: 12, borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)' }}>
+      <div style={{ fontSize: 12, color: '#aab6ff' }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: '#e8ecff' }}>{value}</div>
     </div>
   );
 }
@@ -671,17 +860,19 @@ function periodLabel(p) {
   }
 }
 
+function capitalize(s = '') { return s.charAt(0).toUpperCase() + s.slice(1); }
+
 function CompareCard({ title, current, previous, gridColumn = 'span 3' }) {
   const diff = current - previous;
   const pct = previous === 0 ? 100 : Math.round((diff / previous) * 100);
   const up = diff >= 0;
   return (
-    <div style={{ gridColumn, padding: 16, borderRadius: 12, border: '1px solid #e5e7eb', background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-      <div style={{ fontSize: 13, color: '#64748b' }}>{title}: This Week vs Last</div>
+    <div style={{ gridColumn, padding: 16, borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', boxShadow: '0 10px 30px rgba(0,0,0,0.25)', color: '#e8ecff' }}>
+      <div style={{ fontSize: 13, color: '#aab6ff' }}>{title}: This Week vs Last</div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
         <div style={{ fontSize: 28, fontWeight: 800 }}>{current}</div>
         <div style={{ fontSize: 13, color: '#94a3b8' }}>prev {previous}</div>
-        <div style={{ marginLeft: 'auto', fontWeight: 700, color: up ? '#16a34a' : '#dc2626' }}>{up ? '↑' : '↓'} {Math.abs(pct)}%</div>
+        <div style={{ marginLeft: 'auto', fontWeight: 700, color: up ? '#86efac' : '#fecaca' }}>{up ? '↑' : '↓'} {Math.abs(pct)}%</div>
       </div>
     </div>
   );
@@ -696,7 +887,7 @@ function GoalsCard({ gridColumn = 'span 6', frequency }) {
   const monthPct = Math.min(100, Math.round((workoutsLast30Days / monthlyTarget) * 100));
   const weekPct = Math.min(100, Math.round((workoutsThisWeek / weeklyTarget) * 100));
   return (
-    <div style={{ gridColumn, padding: 16, borderRadius: 12, border: '1px solid #e5e7eb', background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+    <div style={{ gridColumn, padding: 16, borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', boxShadow: '0 10px 30px rgba(0,0,0,0.25)', color: '#e8ecff' }}>
       <div style={{ fontWeight: 600, marginBottom: 8 }}>Goals Progress</div>
       <Progress label={`Monthly (${workoutsLast30Days}/${monthlyTarget})`} percent={monthPct} color={palette.primary} />
       <Progress label={`Weekly (${workoutsThisWeek}/${weeklyTarget})`} percent={weekPct} color={palette.accent} />
@@ -707,12 +898,99 @@ function GoalsCard({ gridColumn = 'span 6', frequency }) {
 function Progress({ label, percent, color }) {
   return (
     <div style={{ marginTop: 12 }}>
-      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>{label}</div>
-      <div style={{ height: 12, background: '#f1f5f9', borderRadius: 9999, overflow: 'hidden' }}>
+      <div style={{ fontSize: 12, color: '#aab6ff', marginBottom: 6 }}>{label}</div>
+      <div style={{ height: 12, background: 'rgba(255,255,255,0.08)', borderRadius: 9999, overflow: 'hidden' }}>
         <div style={{ width: `${percent}%`, height: '100%', background: color, transition: 'width 300ms ease' }} />
       </div>
     </div>
   );
 }
 
+// Simple inference used for top exercises per muscle; mirrors history page
+function inferGroupsFromName(name = '') {
+  const n = name.toLowerCase();
+  const groups = [];
+  if (/(bench|chest|push)/.test(n)) groups.push('chest');
+  if (/(pull|row|back)/.test(n)) groups.push('back');
+  if (/(squat|leg|lunge)/.test(n)) groups.push('legs');
+  if (/(shoulder|press|raise)/.test(n)) groups.push('shoulders');
+  if (/(curl|tricep|arm)/.test(n)) groups.push('arms');
+  if (/(plank|crunch|core)/.test(n)) groups.push('core');
+  if (/(run|cardio|bike|tread|elliptical)/.test(n)) groups.push('cardio');
+  return groups.length ? groups : ['other'];
+}
+
+// Normalize anatomy-click keys to analytics keys
+function normalizeGroupForStats(key = '') {
+  const k = key.toLowerCase();
+  if (k === 'quads' || k === 'hamstrings' || k === 'calves' || k === 'glutes') return 'legs';
+  if (k === 'lats') return 'back';
+  if (k === 'obliques') return 'core';
+  if (k === 'deltoids') return 'shoulders';
+  if (k === 'arms') return 'arms';
+  if (k === 'biceps') return 'biceps';
+  if (k === 'triceps') return 'triceps';
+  return k;
+}
+
 export default Analytics;
+
+// Mini trend chart component for selected muscle (minutes per day)
+function MiniTrend({ muscleKey, dailyActivities, nameToMuscles, period }) {
+  const option = useMemo(() => {
+    const { startDate, endDate } = (function periodToDatesLocal(code) {
+      const now = new Date();
+      const days = code === '7d' ? 7 : code === '90d' ? 90 : code === '365d' ? 365 : 30;
+      const start = new Date(now);
+      start.setDate(now.getDate() - days);
+      return { startDate: start.toISOString(), endDate: now.toISOString() };
+    })(period);
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const labels = [];
+    const values = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const key = d.toISOString().split('T')[0];
+      labels.push(key.slice(5)); // MM-DD for compactness
+      // Sum minutes for this muscle on this date
+      let minutes = 0;
+      dailyActivities
+        .filter(a => (new Date(a.date)).toISOString().split('T')[0] === key)
+        .forEach(a => {
+          const dayMinutes = a.duration || 0;
+          (a.exercises || []).forEach(ex => {
+            const map = nameToMuscles.get((ex.name || '').toLowerCase());
+            if (map && map.primary) {
+              const p = normalizeGroupForStats(map.primary);
+              if (p === muscleKey) minutes += dayMinutes;
+              (map.secondary || []).forEach(sg => {
+                if (normalizeGroupForStats(sg) === muscleKey) minutes += dayMinutes * 0.5;
+              });
+            } else {
+              // fallback to name inference
+              const groups = inferGroupsFromName(ex.name || '');
+              if (groups.includes(muscleKey)) minutes += dayMinutes;
+            }
+          });
+        });
+      values.push(Math.round(minutes));
+    }
+
+    return {
+      backgroundColor: 'transparent',
+      grid: { left: 30, right: 10, top: 10, bottom: 24 },
+      xAxis: { type: 'category', data: labels, axisLabel: { color: '#93a0c3', fontSize: 10 }, axisLine: { lineStyle: { color: '#334155' } } },
+      yAxis: { type: 'value', axisLabel: { color: '#93a0c3', fontSize: 10 }, axisLine: { lineStyle: { color: '#334155' } }, splitLine: { show: true, lineStyle: { color: 'rgba(148,163,184,0.15)' } } },
+      tooltip: { trigger: 'axis' },
+      series: [{ type: 'line', smooth: true, data: values, areaStyle: { color: 'rgba(6,182,212,0.18)' }, lineStyle: { color: '#06b6d4', width: 2 }, symbol: 'none' }]
+    };
+  }, [muscleKey, dailyActivities, nameToMuscles, period]);
+
+  return (
+    <div style={{ border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(255,255,255,0.04)' }}>
+      <div style={{ padding: '6px 10px', color: '#e8ecff', fontWeight: 700, fontSize: 12 }}>Trend (Minutes per day)</div>
+      <ReactECharts option={option} style={{ height: 160, width: '100%' }} notMerge={true} lazyUpdate={true} />
+    </div>
+  );
+}

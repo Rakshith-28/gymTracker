@@ -1,6 +1,7 @@
- import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import ExerciseSelector from '../components/ExerciseSelector.jsx';
 
 function StartSession() {
   const [sessionActive, setSessionActive] = useState(false);
@@ -15,6 +16,8 @@ function StartSession() {
   const [exercises, setExercises] = useState([]);
   const [exerciseLibrary, setExerciseLibrary] = useState([]);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(-1);
+  // Track a global active seconds separate from total seconds (derived but exposed at top)
+  // We keep computing it from exercises + current like before, so no extra timers are needed.
   
   const [selectedExercise, setSelectedExercise] = useState('');
   const [currentSets, setCurrentSets] = useState([]);
@@ -119,7 +122,7 @@ function StartSession() {
       setRestSeconds(0);
     }
 
-    setSelectedExercise(exerciseName);
+  setSelectedExercise(exerciseName);
     setCurrentPhase('exercise');
     setExerciseSeconds(0);
     setCurrentSets([]);
@@ -302,6 +305,10 @@ function StartSession() {
 
   const activeElapsed = exercises.reduce((sum, ex) => sum + (ex.duration || 0), 0) + (currentPhase === 'exercise' ? exerciseSeconds : 0);
   const restElapsed = exercises.reduce((sum, ex) => sum + (ex.restAfter || 0), 0) + (currentPhase === 'rest' ? restSeconds : 0);
+  const exerciseTabs = [
+    ...(currentPhase === 'exercise' && selectedExercise ? [{ name: selectedExercise, live: true, seconds: exerciseSeconds }] : []),
+    ...exercises.map(e => ({ name: e.name, live: false, seconds: e.duration || 0 }))
+  ];
 
   return (
     <div style={bgStyle}>
@@ -432,6 +439,21 @@ function StartSession() {
                 </div>
               </div>
 
+              {/* Exercise Tabs */}
+              {exerciseTabs.length > 0 && (
+                <div style={{ ...card(false) }}>
+                  <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+                    {exerciseTabs.map((t, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 9999, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>
+                        <span style={{ color: '#e8ecff', fontWeight: 700 }}>{t.name}</span>
+                        <span style={{ color: t.live ? '#86efac' : '#aab6ff' }}>{formatTime(t.seconds)}</span>
+                        {t.live && <span style={{ width: 8, height: 8, borderRadius: 8, background: '#22c55e', display: 'inline-block' }} />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Exercise Picker (when not in exercise) */}
               {currentPhase !== 'exercise' && (
                 <div style={{ ...card(false) }}>
@@ -439,12 +461,7 @@ function StartSession() {
                     <h3 style={sectionTitle}>Select Next Exercise</h3>
                     {currentPhase === 'rest' && <span style={pill('rgba(251,191,36,0.15)', '#ffd27a')}>Rest {formatTime(restSeconds)}</span>}
                   </div>
-                  <select value={selectedExercise} onChange={(e) => selectExercise(e.target.value)} style={inputStyle}>
-                    <option value="">Choose an exercise...</option>
-                    {exerciseLibrary.map(ex => (
-                      <option key={ex._id} value={ex.name}>{ex.name}</option>
-                    ))}
-                  </select>
+                  <ExerciseSelector exercises={exerciseLibrary} onSelect={selectExercise} placeholder="Choose an exercise..." />
                   {exerciseLibrary.length > 0 && (
                     <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       {exerciseLibrary.slice(0, 6).map(ex => (

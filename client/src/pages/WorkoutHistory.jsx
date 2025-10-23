@@ -413,6 +413,14 @@ function Chip({ children }) {
   );
 }
 
+// Format seconds to mm:ss for per-exercise duration badges
+function formatMMSS(seconds) {
+  const s = Math.max(0, Number(seconds) || 0);
+  const mins = Math.floor(s / 60);
+  const secs = s % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
 function WorkoutCard({ workout, formatDateTime, type, groups, exercisesCount, setsCount, volume, rating, onDelete }) {
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -468,12 +476,19 @@ function WorkoutCard({ workout, formatDateTime, type, groups, exercisesCount, se
         {expanded && (
           <div style={{ marginTop: 10 }}>
             {(workout.exercises || []).map((ex, idx) => (
-              <div key={idx} style={{ padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between' }}>
+              <div key={idx} style={{ padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontWeight: 600, color: '#e8ecff' }}>{ex.name}</div>
-                <div style={{ color: '#c8ccddff', fontSize: 13 }}>
-                  {(ex.sets || []).map((s, i) => (
-                    <span key={i} style={{ marginLeft: i ? 6 : 0 }}>{s.weight}×{s.reps}</span>
-                  ))}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ color: '#c8ccddff', fontSize: 13 }}>
+                    {(ex.sets || []).map((s, i) => (
+                      <span key={i} style={{ marginLeft: i ? 6 : 0 }}>{s.weight}×{s.reps}</span>
+                    ))}
+                  </div>
+                  {typeof ex.duration === 'number' && (
+                    <span style={{ padding: '4px 8px', borderRadius: 9999, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: '#aab6ff', fontSize: 12 }}>
+                      {formatMMSS(ex.duration)}
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
