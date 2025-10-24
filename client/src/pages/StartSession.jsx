@@ -6,7 +6,7 @@ import styles from './StartSession.module.css';
 import { useWorkout } from '../context/WorkoutContext.jsx';
 
 function StartSession() {
-  const { isSessionActive, start, stop, reset, setPhase: setGlobalPhase, totalTime, activeTime, restTime, recordExercise } = useWorkout();
+  const { isSessionActive, start, stop, reset, cancel, setPhase: setGlobalPhase, totalTime, activeTime, restTime, recordExercise } = useWorkout();
   // Keep local trackers for per-exercise timing
   const [sessionId, setSessionId] = useState(null);
   const [sessionStartTime, setSessionStartTime] = useState(null);
@@ -90,6 +90,33 @@ function StartSession() {
   useEffect(() => {
     setGlobalPhase(currentPhase);
   }, [currentPhase, setGlobalPhase]);
+
+  // If we have an active session, load any saved exercises from the server so resuming shows past work
+  useEffect(() => {
+    const rehydrateFromServer = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const saved = localStorage.getItem('activeSessionId');
+        if (!isSessionActive || !saved) return;
+        // Only fetch if we don't already have exercises in state
+        if (exercises && exercises.length > 0) return;
+        const res = await axios.get(`http://localhost:5000/api/sessions/${saved}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const sess = res?.data;
+        if (sess && Array.isArray(sess.exercises)) {
+          setExercises(sess.exercises);
+          setSessionId(sess._id || saved);
+        }
+      } catch (e) {
+        // Silent failure; user can continue
+        console.warn('Failed to rehydrate session from server', e);
+      }
+    };
+    rehydrateFromServer();
+    // Only run once when session becomes active
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSessionActive]);
 
   // Exercise timer
   useEffect(() => {
@@ -219,7 +246,7 @@ function StartSession() {
     }
   };
 
-  const finishExercise = () => {
+  const finishExercise = async () => {
     const exerciseData = {
       name: selectedExercise,
       startTime: new Date(Date.now() - exerciseSeconds * 1000),
@@ -234,12 +261,46 @@ function StartSession() {
       confidence: exerciseConfidence
     };
 
-  setExercises([...exercises, exerciseData]);
-  try { recordExercise(selectedExercise, exerciseData.sets?.length || 0); } catch {}
+    const updatedExercises = [...exercises, exerciseData];
+    setExercises(updatedExercises);
+    // Persist partial progress to server so resuming shows prior exercises
+    try {
+      const token = localStorage.getItem('token');
+      const effectiveSessionId = sessionId || localStorage.getItem('activeSessionId');
+      if (effectiveSessionId) {
+        await axios.put(`http://localhost:5000/api/sessions/${effectiveSessionId}`, {
+          exercises: updatedExercises
+        }, { headers: { Authorization: `Bearer ${token}` } });
+      }
+    } catch (e) {
+      console.warn('Failed to autosave exercise to session', e);
+    }
+    try { recordExercise(selectedExercise, exerciseData.sets?.length || 0); } catch {}
     setCurrentPhase('rest');
     setExerciseSeconds(0);
     setSelectedExercise('');
     setCurrentExerciseIndex(exercises.length);
+  };
+
+  const stopSessionNow = async () => {
+    if (!window.confirm('Stop session? Your in-progress session will be discarded.')) return;
+    try {
+      const token = localStorage.getItem('token');
+      const effectiveSessionId = sessionId || localStorage.getItem('activeSessionId');
+      if (effectiveSessionId) {
+        // Prefer deleting the incomplete session to avoid clutter
+        await axios.delete(`http://localhost:5000/api/sessions/${effectiveSessionId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }).catch(() => {});
+      }
+    } catch (e) {
+      // Non-blocking
+    } finally {
+      cancel();
+      setExercises([]);
+      setCurrentPhase('idle');
+      navigate('/history');
+    }
   };
 
   const finishSession = async () => {
@@ -583,6 +644,9 @@ function StartSession() {
                 </div>
                 <button disabled={exercises.length === 0} onClick={finishSession} style={{ ...button('linear-gradient(90deg,#ef4444,#dc2626)'), width: '100%', opacity: exercises.length === 0 ? 0.6 : 1 }}>
                   🏁 Finish Workout Session
+                </button>
+                <button onClick={stopSessionNow} style={{ ...button('rgba(255,255,255,0.08)'), width: '100%', marginTop: 10 }}>
+                  ⏹️ Stop Session
                 </button>
               </div>
 
